@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+music_downloader.egg-info/PKG-INFO
+music_downloader.egg-info/SOURCES.txt
+music_downloader.egg-info/dependency_links.txt
+music_downloader.egg-info/entry_points.txt
+music_downloader.egg-info/requires.txt
+music_downloader.egg-info/top_level.txt
+src/__init__.py
+src/downloader.py

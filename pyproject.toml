@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "music-downloader"
+version = "0.1.0"
+description = "Downloads songs from Spotify playlists using Streamrip"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"  # Use license field instead of classifier
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "streamrip",
+    "spotipy",
+    "python-dotenv",
+    "appdirs",
+]
+
+[project.scripts]
+music-downloader = "src.downloader:main"  # Updated path to find main() in src/downloader.py
+
+# Use a src-layout
+[tool.setuptools]
+packages = ["src"]

@@ -1,0 +1,4 @@
+streamrip
+spotipy
+python-dotenv
+appdirs
