@@ -123,7 +123,43 @@ async def download_track(search_string: str) -> None:
         album = AlbumMetadata.from_album_resp(album_data, client.source)
         print(f"Got album metadata for: {album.album}")
         
-        # Create a PendingTrack with all required parameters including album
+        # Handle album artwork
+        from streamrip.media.artwork import download_artwork
+        import os
+        
+        # Print available cover URLs - safely check what attributes are available
+        if hasattr(album, 'covers') and album.covers:
+            # Debug: Print the covers object to see its structure
+            print(f"Covers object: {album.covers}")
+            print(f"Covers object attributes: {dir(album.covers)}")
+            
+            # Safely get cover URL using proper attributes
+            cover_url = None
+            for attr in ['large', 'medium', 'small', 'thumbnail']:
+                if hasattr(album.covers, attr) and getattr(album.covers, attr):
+                    cover_url = getattr(album.covers, attr)
+                    print(f"Using cover URL from '{attr}': {cover_url}")
+                    break
+            
+            if not cover_url:
+                print("No cover URL found in album metadata")
+        
+        # Download album artwork to a temporary location
+        artwork_folder = os.path.join(download_folder, ".artwork")
+        os.makedirs(artwork_folder, exist_ok=True)
+        
+        # Use streamrip's artwork downloader
+        cover_path, _ = await download_artwork(
+            client.session,  # Use the client's existing session
+            artwork_folder,  # Where to save the artwork
+            album.covers,    # The album cover URLs from metadata
+            config.file.artwork,  # Artwork configuration
+            for_playlist=False
+        )
+        
+        print(f"Downloaded album art to: {cover_path}")
+        
+        # Create a PendingTrack with all required parameters including album and cover path
         pending = PendingTrack(
             id=track_id,
             album=album,
@@ -131,10 +167,10 @@ async def download_track(search_string: str) -> None:
             config=config,
             folder=download_folder,
             db=db,
-            cover_path=None
+            cover_path=cover_path  # Pass the downloaded cover path
         )
     except Exception as e:
-        print(f"Error getting album metadata: {e}")
+        print(f"Error getting album metadata or artwork: {e}")
         return
     try:
         resolved = await pending.resolve()
