@@ -1,10 +1,87 @@
-.venv/
-.env
+# Python
 __pycache__/
-*.pyc
-downloader.log
-Output/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.cache
 
-# pixi environments
-.pixi
-*.egg-info
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Audio files / downloaded content
+*.mp3
+*.flac
+*.wav
+*.m4a
+*.aac
+*.ogg
+*.opus
+*.mp4
+*.jpg
+*.jpeg
+*.png
+**/Inbox/
+**/Intake/
+**/.artwork/
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+.~*
+
+# Streamrip data
+*.db
+streamrip/
+.streamrip/
+
+# Logs
+*.log
+logs/
+
+# Local configuration
+config.toml
+.config/
+
+# Jupyter Notebooks (if used for development/testing)
+.ipynb_checkpoints
+*.ipynb
+
+# Mac OS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
