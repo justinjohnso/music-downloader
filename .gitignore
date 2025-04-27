@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 downloader.log
 Output/
+
+# pixi environments
+.pixi
+*.egg-info
