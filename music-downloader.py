@@ -1,27 +1,3 @@
-"""
-music-download.py
-
-Script to search for and download music tracks from Deezer using Streamrip v2 API.
-
-- Loads configuration from the user's TOML config file.
-- Accepts a single search string (artist and track name) or a Spotify track/playlist URL.
-- Searches Deezer for the track(s) and downloads them.
-
-Requirements:
-- streamrip v2 installed and configured
-- Python 3.8+
-- spotipy library (pip install spotipy)
-
-Usage:
-    python music-download.py "billie eilish when i was older"
-    python music-download.py "https://open.spotify.com/track/4jvjzW7Hm0yK4LvvE0Paz9"
-    python music-download.py "https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF"
-    python music-download.py --verbose "billie eilish when i was older"
-
-References:
-- https://github.com/nathom/streamrip
-"""
-
 import sys
 import os
 import re
