@@ -7,7 +7,7 @@ name = "music-downloader"
 version = "0.1.0"
 description = "Downloads songs from Spotify playlists using Streamrip"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = "<4.0,>=3.10"
 license = "MIT"  # Use license field instead of classifier
 classifiers = [
     "Programming Language :: Python :: 3",
