@@ -147,6 +147,7 @@ pip freeze > requirements.txt
 - **`Spotify API credentials not found`**: Verify your `.env` file exists in the correct location (home directory or the directory where you run `python music-downloader.py`) and contains the correct variable names (`SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET`).
 - **`Login failed` (Deezer)**: Check your Deezer ARL cookie in the Streamrip `config.toml` file. It might have expired.
 - **Download Errors**: Use the `--verbose` flag to get more detailed error messages from Streamrip or Spotipy.
+- For other errors, take a look at [the docs for `streamrip`](https://github.com/nathom/streamrip), as that is the component doing most of the heavy lifting.
 
 ## License
 
