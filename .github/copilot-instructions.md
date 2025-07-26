@@ -12,11 +12,18 @@ This document provides guidance for GitHub Copilot to generate code and terminal
 - **Avoid "Magic":** Strive for transparency in logic. Avoid solutions that are difficult to understand or debug without significant effort. Explain non-obvious choices briefly in comments if necessary.
 - **Human Responsibility:** Remember, the human developer is ultimately responsible for the correctness, security, and maintainability of all committed code. Your role is to assist and augment the developer's capabilities, not to replace critical thinking, thorough review, and final validation.
 
+### 🤖 Autonomous Development Patterns
+
+- **Proactive Commits**: **MANDATORY** - After completing any substantial change (new features, bug fixes, refactoring), automatically commit changes with descriptive commit messages that explain what was accomplished and why.
+- **Living Documentation**: **MANDATORY** - Continuously update documentation as code evolves. When modifying functionality, automatically update relevant README files, API documentation, and inline comments to reflect changes.
+- **Proactive Testing**: **MANDATORY** - When adding new functionality or modifying existing code, automatically generate or update tests without being explicitly asked. Ensure test coverage remains comprehensive.
+- **Documentation Continuity**: **MANDATORY** - Maintain awareness of previous documentation and blog posts in the project. When generating new documentation, reference and build upon previous content to create coherent narrative progression.
+
 ---
 
-## 🧰 Use Copilot Chat Commands Actively
+## 🧰 Use Copilot Chat Commands & Tools Actively
 
-Copilot should use its tools proactively to write better code and provide context. Commands that must be used regularly:
+Copilot should use its tools proactively to write better code and provide context. Commands and patterns that must be used regularly:
 
 - **/explain** — Before modifying complex, unfamiliar, or critical code, explain its current functionality and potential impact of changes. Also use to clarify generated code upon request.
 - **/fix** — Apply only after investigating the root cause via `/terminal`, `/problems`, or explicit debugging steps discussed in chat. Explain the fix being applied.
@@ -24,6 +31,15 @@ Copilot should use its tools proactively to write better code and provide contex
 - **/problems** — Review issues in the Problems panel before making assumptions about errors or required changes. Reference specific problem messages if relevant.
 - **/terminal** — Check recent terminal output for errors, crashes, logs, or build/test results before proposing fixes or proceeding with tasks that depend on previous commands succeeding.
 - **/optimize** — Only propose optimizations *after* baseline functionality is confirmed correct and adequately tested. Prioritize clarity unless performance is a documented requirement. Explain the trade-offs of the optimization.
+
+### 🔧 Advanced Tool Integration
+
+- **Context-Aware File Operations**: When reading files, prefer reading larger, meaningful chunks rather than small consecutive sections. Use semantic understanding to identify related code blocks.
+- **Workspace Analysis**: Before suggesting changes, analyze the broader workspace structure to understand existing patterns, dependencies, and architectural decisions.
+- **Multi-File Coordination**: When changes span multiple files, coordinate edits to maintain consistency across the codebase. Use tools to verify that cross-file references remain valid.
+- **Incremental Development**: Break complex tasks into smaller, testable increments. Verify each step before proceeding to the next.
+- **Error Context Gathering**: When encountering errors, gather comprehensive context including recent changes, environment state, and related configuration before proposing solutions.
+- **Proactive Research**: Use available tools to research unfamiliar libraries, APIs, or frameworks before making implementation suggestions. Verify current best practices and API signatures.
 
 ---
 
@@ -43,6 +59,53 @@ Follow consistent structure across projects (backend, frontend, full-stack):
 - Use standard folder structures like `components/`, `hooks/`, `store/` (or `state/`), `styles/`, `pages/` (or `views/`), `lib/` (or `utils/`), `api/`.
 - Favor functional components and hooks over class components unless the existing codebase predominantly uses classes.
 - Maintain clear separation of concerns: keep UI rendering logic (JSX), state management (hooks, stores), data fetching/API calls, and styling distinct.
+- **Modern React Patterns**: Use React 18+ features like concurrent features, Suspense boundaries, and error boundaries appropriately. Prefer `useTransition` and `useDeferredValue` for performance-critical updates.
+- **TypeScript Integration**: Use strict TypeScript configurations. Leverage discriminated unions, branded types, and utility types for robust type safety.
+- **Component Architecture**: Design components with clear props interfaces, proper error boundaries, and predictable state management. Use composition over inheritance.
+
+### Physical Computing & Embedded Systems
+
+#### Arduino & ESP32 Development
+- **Project Structure**: Organize code with clear separation between hardware abstraction, business logic, and communication protocols:
+  ```
+  src/
+    main.cpp          # Main application entry point
+    config.h          # Hardware pins, constants, and configuration
+    sensors/          # Sensor abstraction and driver code
+    actuators/        # Motors, LEDs, servo control
+    communication/    # WiFi, Bluetooth, serial protocols
+    utils/            # Helper functions and utilities
+  lib/                # Custom libraries and dependencies
+  data/               # Web assets for ESP32 web servers
+  ```
+- **PlatformIO Integration**: Use `platformio.ini` for environment management, library dependencies, and build configurations. Maintain separate environments for different boards or deployment targets.
+- **Memory Management**: Be conscious of RAM and flash memory limitations. Use `PROGMEM` for storing constants in flash memory on Arduino. Prefer stack allocation over dynamic allocation where possible.
+- **Pin Configuration**: Define all pin assignments in a central `config.h` file with descriptive names. Use `const` or `#define` for pin numbers to avoid magic numbers in code.
+
+#### Hardware Communication Protocols
+- **I2C/SPI Best Practices**: Always check return values from communication functions. Implement proper error handling for device initialization failures.
+- **Serial Communication**: Use appropriate baud rates (commonly 9600, 115200) and implement proper handshaking when needed. Include timeout handling for serial reads.
+- **WiFi & Networking**: Implement connection retry logic with exponential backoff. Handle network disconnections gracefully. Use secure protocols (WPA2/WPA3) and avoid hardcoded credentials.
+- **MQTT Integration**: Structure MQTT topics hierarchically (`device/sensor/measurement`). Implement Last Will and Testament (LWT) for device status monitoring.
+
+#### Power Management & Optimization
+- **Deep Sleep Implementation**: Use appropriate sleep modes (light sleep, deep sleep) for battery-powered projects. Wake from sleep using external interrupts or timers.
+- **Peripheral Management**: Disable unused peripherals to reduce power consumption. Implement proper peripheral initialization and deinitialization.
+- **Battery Monitoring**: Include voltage monitoring for battery-powered devices. Implement low-battery warnings and safe shutdown procedures.
+
+#### Code Quality & Debugging
+- **Hardware Abstraction**: Create abstraction layers for sensors and actuators to enable easy testing and hardware swapping.
+- **Timing Considerations**: Use `millis()` for non-blocking delays instead of `delay()`. Implement proper timing for sensor readings and actuator control.
+- **Interrupt Safety**: Keep interrupt service routines (ISRs) short and fast. Use volatile variables for data shared between ISRs and main code.
+- **Debugging Support**: Include meaningful serial output for debugging. Use preprocessor directives to enable/disable debug output in production builds.
+- **Watchdog Timer**: Implement watchdog timers for critical applications to handle system lockups gracefully.
+
+### Full-Stack & Modern Patterns
+
+- **API Design**: Follow RESTful principles or GraphQL best practices. Use consistent error handling, proper HTTP status codes, and comprehensive request/response validation.
+- **State Management**: Choose appropriate state management solutions (Context API, Zustand, Redux Toolkit) based on complexity. Avoid over-engineering simple state needs.
+- **Real-time Features**: When implementing real-time functionality, consider WebSockets, Server-Sent Events, or modern solutions like WebRTC for different use cases.
+- **Edge Computing**: Design with edge computing in mind when appropriate. Consider geo-distributed architectures for performance-critical applications.
 
 ---
 
@@ -66,6 +129,44 @@ Follow consistent structure across projects (backend, frontend, full-stack):
 - Use `const` by default; use `let` only when reassignment is necessary. Avoid `var`.
 - In TypeScript, provide explicit types where inference is not clear or for function signatures. Avoid `any` unless absolutely necessary and justified.
 
+### C/C++ (Arduino, ESP32, PlatformIO)
+
+- **Naming Conventions**: Use `camelCase` for variables and functions, `PascalCase` for classes, `UPPER_CASE` for constants and macros.
+  ```cpp
+  const int LED_PIN = 13;           // Constants
+  int sensorValue;                  // Variables  
+  void readSensor();                // Functions
+  class TemperatureSensor {};       // Classes
+  ```
+- **Header Guards**: Always use include guards (`#ifndef`, `#define`, `#endif`) or `#pragma once` for header files.
+- **Memory Safety**: Minimize dynamic memory allocation. When using `malloc`/`free`, always check for null pointers and avoid memory leaks.
+- **Const Correctness**: Use `const` for variables that don't change, function parameters that shouldn't be modified, and member functions that don't change object state.
+- **Resource Management**: Use RAII principles. Initialize hardware in constructors, clean up in destructors.
+- **Error Handling**: Check return values from hardware operations. Use error codes or simple boolean returns for embedded systems.
+- **Code Organization**: 
+  - Keep `.h` files for declarations, `.cpp` files for implementations
+  - Use forward declarations where possible to reduce compilation dependencies
+  - Group related functionality in namespaces or classes
+- **Performance Considerations**:
+  - Avoid function calls in tight loops when possible
+  - Use appropriate data types (prefer `uint8_t` for small values)
+  - Consider compiler optimizations with `-O2` or `-Os` for size optimization
+- **Hardware-Specific Practices**:
+  - Use `volatile` for variables modified by interrupts
+  - Prefer bit manipulation for efficient GPIO operations
+  - Document timing requirements and hardware dependencies
+  - Group related functionality into classes or namespaces
+- **Platform-Specific Code**: Use preprocessor directives to handle platform differences:
+  ```cpp
+  #ifdef ESP32
+    // ESP32-specific code
+  #elif defined(ARDUINO_UNO)
+    // Arduino Uno specific code
+  #endif
+  ```
+- **Resource Management**: Always initialize variables, especially those used in interrupts. Use RAII principles where applicable.
+- **Performance Considerations**: Prefer compile-time constants over runtime calculations. Use appropriate data types (uint8_t, uint16_t) to minimize memory usage.
+
 ---
 
 ## 🧪 Testing
@@ -77,22 +178,40 @@ Follow consistent structure across projects (backend, frontend, full-stack):
     - Error handling paths (e.g., simulating exceptions, invalid inputs, network failures, permission errors).
     - Validation of input sanitization and security controls (e.g., testing against injection patterns).
     - Relevant integration points.
+    - **Property-based testing** for complex algorithms where applicable (use libraries like `fast-check` for JS/TS or `hypothesis` for Python).
 - **Test Quality:** Generated tests should be clear, readable, maintainable, and provide specific, meaningful assertions. Avoid trivial tests (e.g., `assert true`) or tests that merely duplicate the implementation logic. Tests should fail for the right reasons.
+- **Modern Testing Practices:**
+    - **Snapshot Testing**: Use sparingly and only for stable UI components. Update snapshots deliberately, not automatically.
+    - **Component Testing**: For React components, test behavior and user interactions, not implementation details.
+    - **API Testing**: Include contract testing for APIs using tools like Pact or OpenAPI validation.
+    - **Performance Testing**: Include performance assertions for critical paths using tools like Lighthouse CI or custom benchmarks.
 - **Frameworks & Location:**
     - JS/TS: Use `jest` or `vitest`. Place test files in `__tests__/` directories or adjacent to source files using `.test.ts` / `.test.js` / `.spec.ts` / `.spec.js` extensions.
     - Python: Use `pytest`. Place tests in a dedicated `tests/` directory mirroring the source structure.
+    - **C/C++ (Arduino/ESP32)**: Use `Unity` test framework or `PlatformIO Unit Testing`. Structure tests in `test/` directory with descriptive test files (e.g., `test_sensors.cpp`, `test_communication.cpp`).
 - **Integration Testing:** For code involving interactions between different modules, components, services, or external systems (APIs, databases), ensure that relevant integration tests are generated or updated to verify these interactions.
+- **Hardware-in-the-Loop Testing**: For embedded systems, implement tests that can run both in simulation and on actual hardware. Use dependency injection or hardware abstraction layers to enable testing without physical devices.
 - **Testing AI-Generated Code:** Recognize that code generated or significantly modified by AI requires particularly rigorous testing due to the potential for subtle logical flaws, missed edge cases, or security vulnerabilities not immediately apparent. Use testing as a primary mechanism to validate the *correctness* and *safety* of AI suggestions, not just their syntactic validity.
+- **Embedded System Testing Considerations:**
+    - **Timing Tests**: Verify that time-critical operations meet their deadlines
+    - **Resource Constraint Tests**: Test behavior under low memory or power conditions
+    - **Hardware Fault Simulation**: Test error handling for sensor failures, communication timeouts, and power interruptions
+    - **Real-world Condition Tests**: Test with realistic sensor noise, temperature variations, and environmental factors
+- **Test Data Management**: Use factories, fixtures, or builders for test data. Avoid hardcoded test data that makes tests brittle. Consider using tools like Faker.js for realistic test data generation.
 
 ---
 
 ## ⚙️ Environment & Dependency Management
 
 - Use `.env` files and a supporting library (e.g., `python-dotenv`, `dotenv` for Node.js) for *all* environment-specific configuration, including local development settings and third-party service URLs. See Security section for secrets.
+- **Embedded Systems Configuration**: For Arduino/ESP32 projects, use `config.h` files for hardware-specific settings (pin assignments, sensor parameters, WiFi credentials for development). Never commit production credentials to version control.
 - **Never commit `.env` files** or files containing secrets to version control. Ensure `.env` is listed in the project's `.gitignore` file.
 - Code should be environment-agnostic where possible, relying on environment variables for configuration to work seamlessly in local development, CI/CD pipelines, and cloud deployment environments (e.g., Vercel, Netlify, AWS, Azure, GCP). Avoid platform-specific logic unless absolutely necessary and clearly documented.
+- **PlatformIO Environment Management**: Use `platformio.ini` environments to manage different build configurations, board types, and deployment targets. Keep sensitive configuration in environment-specific files.
 - **Dependency Pinning:** Ensure all projects utilize dependency lock files (e.g., `package-lock.json`, `pnpm-lock.yaml`, `poetry.lock`, pinned `requirements.txt` generated via `pip-compile`) and that these files are kept up-to-date and committed to version control. This ensures reproducible builds.
+- **Library Version Management**: For PlatformIO projects, specify exact library versions in `platformio.ini` or `library.json` to ensure consistent builds across development environments.
 - **Vulnerability Scanning:** **Mandatory:** Before finalizing code suggestions that add or update dependencies, recommend or perform a vulnerability scan using standard tools (e.g., `pnpm audit`, `pip check --safety-db`, `trivy`, Snyk integration). Report any detected vulnerabilities of medium severity or higher to the user.
+- **Hardware Dependencies**: Document hardware requirements, sensor specifications, and wiring diagrams in project documentation. Include part numbers and supplier information for reproducibility.
 - **License Awareness:** Be mindful of software license compatibility. If incorporating code snippets that appear non-trivial or potentially derived from external sources, flag the potential need for a license review by the developer. Do not suggest code or dependencies that clearly violate the project's stated license constraints (if known). Ensure rigorous source attribution (see Attribute Sources rule).
 
 ---
@@ -105,10 +224,20 @@ Follow consistent structure across projects (backend, frontend, full-stack):
     - Prioritize stable, actively maintained libraries from reputable sources.
     - Check for known vulnerabilities *before* incorporating them (see Environment & Dependency Management section).
     - Prefer libraries with a proven track record of security updates.
+    - Use `npm audit`, `pnpm audit`, or equivalent tools regularly.
 - **Output Escaping:** Always escape dynamic output appropriately in templates (JSX, Jinja2, EJS, etc.) or when constructing HTML, SQL, or shell commands to prevent XSS and other injection attacks. Use framework-specific escaping mechanisms where available.
 - **Least Privilege Principle:** Generated code, configurations, or infrastructure definitions should adhere to the principle of least privilege. Grant only the minimum permissions necessary for the code to perform its intended function. Avoid overly broad access rights.
 - **Avoid Dangerous Functions:** Avoid using inherently dangerous functions or patterns like `eval()`, `exec()`, `pickle` with untrusted data, or direct execution of shell commands constructed from user input, unless absolutely necessary, sandboxed, and explicitly approved.
 - **Authentication & Authorization:** Implement standard, robust authentication and authorization mechanisms. Do not invent custom crypto or authentication schemes. Ensure authorization checks are performed on all protected endpoints/operations.
+- **Modern Security Patterns:**
+    - **Content Security Policy (CSP)**: Implement strict CSP headers for web applications.
+    - **CSRF Protection**: Use anti-CSRF tokens for state-changing operations.
+    - **Rate Limiting**: Implement rate limiting for public APIs and authentication endpoints.
+    - **Secure Headers**: Include security headers like HSTS, X-Frame-Options, and X-Content-Type-Options.
+- **AI-Specific Security Considerations:**
+    - **Prompt Injection Defense**: When building AI-integrated applications, implement robust input filtering and context isolation to prevent prompt injection attacks.
+    - **Data Exposure Prevention**: Ensure AI models don't inadvertently expose sensitive data through completion suggestions or training data leakage.
+    - **Model Integrity**: When using local AI models, verify model integrity and use secure model loading practices.
 - **Explicitly Avoid Common Pitfalls:** Actively avoid generating code that employs known insecure practices or patterns. Examples include: using weak or deprecated cryptographic algorithms (e.g., MD5/SHA1 for passwords), disabling security features without explicit user confirmation, implementing insecure file upload handling, using default credentials, generating predictable random numbers for security purposes, or having overly permissive CORS configurations. If such a pattern seems necessary, flag it and request explicit confirmation.
 - **Awareness of LLM/AAI Risks:** Be mindful of potential prompt injection, jailbreaking, or context manipulation risks. Verify that generated code does not inadvertently bypass security controls, leak sensitive context, or execute unintended actions based on potentially manipulated instructions or context (e.g., instructions embedded in external configuration or documentation files referenced ).
 - **Keep Dependencies Updated:** Regularly update dependencies to patch known vulnerabilities (facilitated by vulnerability scanning and lock files).
@@ -123,6 +252,32 @@ Follow consistent structure across projects (backend, frontend, full-stack):
 - **Database Queries:** Write efficient database queries. Select only necessary fields. Use indexes appropriately. Avoid N+1 query problems in ORMs. Use database connection pooling.
 - **Large Data Sets:** Use pagination, streaming, or lazy loading techniques when dealing with potentially large data sets to avoid excessive memory consumption or network traffic.
 - **Resource Management:** Ensure resources like file handles or network connections are properly closed or released, even in error scenarios (e.g., using `try...finally` or context managers like Python's `with` statement).
+- **Modern Performance Patterns:**
+    - **Lazy Loading**: Implement lazy loading for components, images, and data that aren't immediately needed.
+    - **Memoization**: Use React.memo, useMemo, and useCallback judiciously. Don't over-memoize simple operations.
+    - **Virtual Scrolling**: For large lists, consider virtual scrolling libraries to maintain performance.
+    - **Code Splitting**: Implement strategic code splitting using dynamic imports and bundler features.
+    - **Web Vitals**: Monitor and optimize Core Web Vitals (LCP, FID, CLS) for web applications.
+- **Caching Strategies:**
+    - **HTTP Caching**: Implement appropriate cache headers and ETags for static resources.
+    - **Application Caching**: Use Redis or similar for session storage and frequently accessed data.
+    - **CDN Integration**: Leverage CDNs for static asset delivery and edge caching.
+- **Bundle Optimization:**
+    - **Tree Shaking**: Ensure build tools can eliminate dead code effectively.
+    - **Compression**: Use Gzip/Brotli compression for all text assets.
+    - **Image Optimization**: Use modern image formats (WebP, AVIF) with appropriate fallbacks.
+
+---
+
+## 🤖 AI-Native Development Patterns
+
+- **Context-Aware Coding**: Structure code and comments to provide maximum context for AI assistants. Use descriptive variable names, clear function signatures, and meaningful module organization.
+- **Incremental Complexity**: Build complex systems incrementally, testing each component thoroughly before adding the next layer. This approach helps AI assistants understand and extend your code more effectively.
+- **Pattern Documentation**: When implementing custom patterns or domain-specific logic, include clear comments explaining the approach and rationale. This helps AI assistants maintain consistency when extending the code.
+- **Error-Driven Development**: Use comprehensive error handling and logging to create clear failure modes that AI assistants can understand and debug effectively.
+- **Modular Architecture**: Design systems with clear module boundaries and well-defined interfaces. This enables AI assistants to work on individual components without breaking the overall system.
+- **Test-Driven Clarity**: Write tests that serve as both validation and documentation. Well-written tests help AI assistants understand expected behavior and edge cases.
+- **Configuration Over Hardcoding**: Use configuration files and environment variables to make systems adaptable without code changes. This makes it easier for AI assistants to suggest modifications without touching core logic.
 
 ---
 
@@ -158,7 +313,9 @@ Follow consistent structure across projects (backend, frontend, full-stack):
 
 - **Mandatory Verification:** When generating code that calls external APIs, uses functions/classes from libraries, or imports packages, **you MUST verify their existence and the correctness of their usage (e.g., method signatures, parameter names, expected types)**. Cross-reference against official documentation, the project's existing dependency list, or established code patterns within the project. **Do not invent or 'hallucinate' API endpoints, functions, or package names.**
 - **Consult Documentation When Unsure:** If you are unsure about the existence or correct usage of a specific API, library feature, or package, explicitly state your uncertainty and recommend the developer consult the official documentation or relevant source code. Do not present uncertain information as fact.
-- **Flag Low-Frequency/New APIs:** If generating code that utilizes APIs or library features known to be uncommon, recently introduced, or significantly changed (i.e., potentially low frequency in training data ), explicitly flag this. Recommend extra scrutiny and direct verification against the latest official documentation by the developer.
+- **Flag Low-Frequency/New APIs:** If generating code that utilizes APIs or library features known to be uncommon, recently introduced, or significantly changed (i.e., potentially low frequency in training data), explicitly flag this. Recommend extra scrutiny and direct verification against the latest official documentation by the developer.
+- **Version Awareness:** When suggesting libraries or frameworks, be explicit about version requirements and compatibility. If unsure about version-specific features, recommend verification against the project's current dependency versions.
+- **Graceful Uncertainty:** When you don't know something, say so clearly and provide actionable next steps for the developer to research or verify the information independently.
 
 ---
 
@@ -166,12 +323,28 @@ Follow consistent structure across projects (backend, frontend, full-stack):
 
 To ensure consistency, efficiency, and safety in terminal operations, adhere to the following guidelines when generating or suggesting terminal commands:
 
-- **Package Management:** Prefer `pnpm` for Node.js projects due to its speed and disk space efficiency (`pnpm install`, `pnpm add`, `pnpm run`). For Python, use `pip` (often with `pip-tools` for compiling `requirements.txt`) or `poetry` as dictated by the project setup.
+- **Package Management:** 
+  - Prefer `pnpm` for Node.js projects due to its speed and disk space efficiency (`pnpm install`, `pnpm add`, `pnpm run`). 
+  - For Python, use `pip` (often with `pip-tools` for compiling `requirements.txt`) or `poetry` as dictated by the project setup.
+  - For PlatformIO projects, use `pio` commands (`pio run`, `pio upload`, `pio lib install`, `pio device monitor`).
+- **Modern Development Tools:**
+    - **Build Tools**: Prefer modern build tools like Vite, esbuild, or SWC for faster development cycles.
+    - **Linting & Formatting**: Use `eslint --fix` and `prettier --write` for automated code formatting. Include `--cache` flags where available for better performance.
+    - **Type Checking**: Use `tsc --noEmit` for TypeScript type checking without compilation in CI/CD pipelines.
+    - **Hardware Development**: Use `pio device list` to identify connected devices, `pio device monitor` for serial debugging with appropriate baud rates.
+- **Hardware Development Tools:**
+    - Include board-specific upload commands (`pio run -t upload -e esp32dev`).
+    - Use `--verify` flags for critical deployments to embedded systems.
+    - Specify correct baud rates and ports for serial communication (`pio device monitor --baud 115200 --port /dev/ttyUSB0`).
 - **Path Specifications:** Use relative paths when appropriate within the project structure. Use absolute paths primarily when referencing system-wide locations or when necessary to avoid ambiguity, clearly indicating if a path needs user configuration.
-- **Command Verification:** Before suggesting commands that modify the filesystem (e.g., `rm`, `mv`), install packages (`pnpm add`, `pip install`), or execute scripts with potential side effects, clearly state the command's purpose and potential impact. For destructive commands, advise caution or suggest a dry run if available.
+- **Command Verification:** Before suggesting commands that modify the filesystem (e.g., `rm`, `mv`), install packages (`pnpm add`, `pip install`, `pio lib install`), or execute scripts with potential side effects, clearly state the command's purpose and potential impact. For destructive commands, advise caution or suggest a dry run if available. Always verify board connections before upload commands for embedded systems.
 - **Alias Usage:** Do not rely on shell aliases being present in the user's environment. Generate the full commands required. Suggest creating aliases only if explicitly asked or as a separate optional tip.
 - **Environment Consistency:** Assume environment variables are loaded via `.env` files as per project standards. Do not suggest exporting secrets directly in the terminal.
-- **Scripting:** When generating shell scripts (`.sh`), include comments (`#`) to explain complex commands or logical sections. Use `set -e` to ensure scripts exit on error. Validate inputs where appropriate.
+- **Scripting:** When generating shell scripts (`.sh`), include comments (`#`) to explain complex commands or logical sections. Use `set -e` to ensure scripts exit on error. Validate inputs where appropriate. For embedded systems, include hardware safety checks and appropriate error handling for device communication.
+- **Performance Optimization:**
+    - **Parallel Execution**: Use `&` for running independent tasks in parallel where appropriate.
+    - **Cache Utilization**: Leverage package manager caches and build caches to speed up operations.
+    - **Selective Operations**: Use glob patterns and selective flags to avoid unnecessary work (e.g., `--changed` flags in monorepos).
 
 ---
 
@@ -194,40 +367,60 @@ When provided with links to example code (e.g., GitHub repositories, gists, code
 
 When asked to generate a write-up, development log, or blog post (e.g., via the `write a blog post` command), GitHub Copilot **must strictly adhere to these guidelines** to generate documentation that authentically replicates the author's specific voice, style, and documentation philosophy, as exemplified by the **Reference Examples**. The **non-negotiable primary goal** is meticulous emulation of the author's style found in the references, **not** the creation of generic blog content, formal tutorials, or textbook-like manuals. This requires documenting the development *process* with extreme fidelity, capturing the *experience* of building or creating something. Think of it as a detailed personal record: "I made this thing; here's exactly what I did, thought, and encountered," rather than a guide designed primarily for others.
 
+### 🎯 Reference Analysis Protocol
+
+- **MANDATORY**: Before generating any content, if reference examples are not provided in the current context, explicitly request access to 2-3 of the most relevant reference examples from the list below based on the technical domain or project type.
+- **Deep Pattern Analysis**: When reference examples are available, analyze them for:
+  - Sentence structure patterns and rhythm
+  - Technical detail density and presentation style
+  - Problem-solving narrative flow
+  - Specific vocabulary choices and technical terminology usage
+  - Transition patterns between different phases of work
+  - How uncertainty, iteration, and debugging are documented
+- **Voice Fingerprinting**: Identify the author's distinctive writing "fingerprint" - recurring phrases, sentence starters, ways of expressing frustration or success, and technical explanation patterns.
+
 ### ✅ Voice & Style: Emulate the Author (Mandatory Requirements)
 
-- **Reflective & Factual First-Person Tone**: **MANDATORY**. Consistently use "I," "my," "me." Describe actions *and* the concurrent thought process (e.g., "I decided to use library X because I needed feature Y," "I noticed the output was Z, which made me think the issue was..."). Focus relentlessly on documenting the *exact* sequence of thoughts, actions, trials, errors, and insights *as they occurred in real time*. Honesty about difficulties, dead ends, and moments of confusion is paramount. Write as if documenting your own process for your future self or a close collaborator, capturing the *experience* of the work.
-- **Technically Specific but Personal**: **MANDATORY**. Include precise technical artifacts: correctly formatted code snippets, exact error messages, specific commands used, relevant configuration details. Crucially, provide **inline rationale** explaining the *why* behind technical choices, observations, or debugging steps *at the exact moment they are described*. Assume general technical fluency but briefly explain project-specific context only if absolutely necessary for understanding the step described. The goal is to document *your* specific journey, not create a general guide.
-- **Direct, Concise, Natural Language**: **MANDATORY**. Write directly and plainly. **Eliminate** filler words, hedging phrases, and unnecessary introductory clauses (e.g., avoid starting sentences with "In order to...", "It should be noted that...", "I proceeded to..."). Use clear, everyday language consistent with the examples. **Actively vary sentence length**; short sentences and single-sentence paragraphs are encouraged for clarity, emphasis, and pacing. Avoid jargon unless it's common in the examples or briefly defined in context. Keep it grounded in your personal experience.
-- **Chronological/Logical Process Reporting**: **MANDATORY**. Structure the text **strictly** according to the sequence in which events happened or the logical path taken during troubleshooting or development. **Do not** reorder events for narrative effect or to create a smoother story. The process itself, with all its detours, dictates the structure. This is a log of *what happened*, not a polished tutorial.
+- **Direct Technical Documentation with Stream-of-Consciousness Flow**: **MANDATORY**. Focus on what was built, what problems were solved, and how, but allow for natural tangents, pivots, and evolving thoughts. Use clear, straightforward language that explains technical decisions while capturing the iterative nature of development.
+- **Problem-Solution-Iteration Structure**: **MANDATORY**. Organize content around specific technical challenges and their solutions, but include pivots, false starts, and evolving approaches ("Aaaand we pivoted again", "As I was working on building out the actual *game* part...").
+- **Conversational and Candid Tone**: **MANDATORY**. Use first person with natural, casual language. Include honest reactions to setbacks and changes ("which was 100% true, and would have been absurd to try to pull off", "Despite (maybe because of) having a background in web development").
+- **Specific Technical Details with Context**: **MANDATORY**. Include exact library names, version numbers, configuration details, file paths, and code snippets, but weave them into the natural flow of problem-solving and decision-making.
+- **Iterative Design Thinking Documentation**: **MANDATORY**. Show the evolution of ideas, including abandoned approaches and the reasoning behind changes. Document open questions and areas of uncertainty ("There are still a lot of open questions I need to figure out").
+- **Natural Technical Decision Flow**: **MANDATORY**. Document decisions as they unfold, including the thought process behind tool choices and implementation approaches. Show how constraints and feedback influenced direction.
 
 ### 🧱 Structure Patterns: Follow the Examples (Mandatory Requirements)
 
-- **Context First**: Start **directly** with the specific problem, task, observation, or goal that initiated the work segment being documented. **No generic introductions**.
-- **Inline Context & Rationale**: **Integrate** explanations for decisions *within* the description of the action itself. Do not separate 'what was done' from 'why it was done'.
-- **Beat-by-Beat Reporting**: Detail **all** significant steps, **especially** including failed attempts, specific debugging actions ("Checked the server logs," "Added a `console.log` here," "Googled the error message 'XYZ'"), moments of confusion ("I wasn't sure why X was happening"), and subsequent corrections or changes in direction. Show the *real*, often non-linear, iterative path.
-- **Short, Focused Paragraphs**: Use brief paragraphs, often just 2-4 sentences, centered on a single step, thought, observation, or code block. Use line breaks effectively to visually separate distinct steps or ideas.
-- **Abrupt Endings Expected**: End the log **immediately** when the relevant work segment or thought process being documented is complete. **Do not** add concluding summaries, overall reflections, "next steps," or future outlooks unless documenting such a reflection was explicitly part of the final step taken.
+- **Functional but Casual Section Headers**: **MANDATORY**. Use descriptive section headers that indicate progress or focus areas, but allow for informal language ("Aaaand we pivoted again", "Why am I changing things up?", "Wibbly-wobbly timey-wimey stuff"). Headers should reflect the actual development experience.
+- **Brainstorming and Decision Documentation**: **MANDATORY**. Include lists of options considered, approaches tried, and reasons for changes. Show the iterative decision-making process with bullet points and natural explanations.
+- **Open Questions and Uncertainty**: **MANDATORY**. Explicitly document areas of uncertainty, open design questions, and things that still need to be figured out. This shows the real, ongoing nature of development work.
+- **Technical Implementation with Context**: **MANDATORY**. Follow problem identification with implementation details, but include the reasoning, constraints, and feedback that influenced the approach.
+- **Natural Flow with Tangents**: **MANDATORY**. Allow the structure to follow the actual development process, including side thoughts, inspirations, and connections to other projects or ideas.
+- **Before/After Comparisons with Honesty**: **MANDATORY**. Show what changed and why, but include honest assessments of what didn't work or what was "absurd to try to pull off".
+- **Process Documentation with Personality**: **MANDATORY**. Document the actual steps taken, but include natural reactions, frustrations, and moments of realization that occurred during development.
 
 ### 📌 Stylistic Elements to Replicate (Mandatory Requirements)
 
-- **Specific Technical Details**: **MANDATORY**. Show, don't just tell. Embed correctly formatted code snippets (using appropriate Markdown syntax), shell commands, error outputs, relevant configuration snippets, etc., directly into the narrative flow where they occurred.
-- **Record of Uncertainty & Iteration**: **MANDATORY**. Explicitly state when unsure ("I wasn't sure how to approach...", "It took several tries to get the syntax right..."), describe the specific debugging process ("The error `ABC` suggested a type mismatch, so I checked the variable declaration..."), and explain how solutions evolved ("Initially, I tried approach X, but it failed because of Y, so I switched to approach Z..."). Capture the non-linear reality of development.
-- **Genuine Personal Reactions (Inline & Brief)**: Use **sparingly**, only if authentic to the moment and reflecting the tone in examples. Short, integrated phrases like "That was surprisingly tricky," "Finally got it working!", "I didn't expect that behavior," are acceptable. Keep them concise and part of the flow.
-- **Links to Resources (Contextual)**: Include links to documentation, Stack Overflow answers, relevant articles, GitHub issues, etc., *exactly at the point in the narrative* where they were consulted or influenced a decision or understanding.
+- **Technical Implementation with Personality**: **MANDATORY**. Emphasize the "how" of technical solutions with specific details, but include natural commentary and reactions ("It took a bit to find a library for the sensor and get the settings dialed in").
+- **Honest Assessment of Approaches**: **MANDATORY**. Document what worked, what didn't, and frank evaluations of decisions ("which was 100% true, and would have been absurd to try to pull off", "I'm not a fan of manually coding stuff in HTML and CSS").
+- **Tool and Library Specificity with Experience**: **MANDATORY**. Always mention specific tools and libraries, but include the context of discovering, choosing, or struggling with them ("VL53L0X time-of-flight sensor", "implemented it with help from this example").
+- **Design Process Documentation**: **MANDATORY**. Show the iterative design thinking process, including inspiration sources, constraint identification, and evolving requirements. Include external references and influences naturally.
+- **Casual Technical Problem-Solving**: **MANDATORY**. Document debugging and problem-solving with natural language ("Wibbly-wobbly timey-wimey stuff", "Soooo we're using Chart.js"). Include moments of realization and "aha" discoveries.
+- **Visual Documentation Integration**: **MANDATORY**. Include screenshots, prototypes, and visual examples as natural parts of the development story. Reference visuals that show progress and iteration.
+- **Stream-of-Consciousness Technical Thinking**: **MANDATORY**. Allow for natural thought progression, including side thoughts, connections to other projects, and evolving understanding of the problem space.
+- **Constraint-Driven Decision Making**: **MANDATORY**. Show how technical and design constraints influenced decisions. Include feedback from others and how it shaped the direction ("Mark gave us feedback that this felt like trying to build two separate games").
 
 ### 🚫 Patterns to Actively Avoid (Crucial Negative Constraints - Strict Prohibitions)
 
-- **ABSOLUTELY NO Generic Introductions/Conclusions**: **DO NOT** write introductory sentences setting broad context or concluding paragraphs summarizing the work, listing takeaways, or stating future plans. Start with the first concrete action/thought; end with the last documented one.
-- **AVOID Overly Optimistic/Promotional Tone**: Report facts, including difficulties, bugs, and failures, neutrally and directly as they happened. **DO NOT** downplay problems, inject artificial positivity, or frame everything as a seamless success.
-- **ELIMINATE Hedging/Vagueness**: **Replace** phrases like "it might be," "perhaps," "seems like," "could potentially," "it appears that" with direct statements based on the documented experience ("I observed X," "The result was Y," "The error indicated Z," "I decided to..."). Be specific and factual about *your* process.
-- **MINIMIZE Formulaic Transitions**: **Avoid** overuse of "Furthermore," "Moreover," "Additionally," "However," "Thus," "Therefore." Rely on the logical/chronological flow. Use simpler, natural transitions sparingly if needed ("Then," "Next," "So," "Because," "After that").
-- **DO NOT Impose Narrative Arcs**: **Resist** structuring the log like a story (setup, conflict, resolution). The factual sequence of technical steps, thoughts, and debugging efforts *is* the required structure.
-- **AVOID Writing for a Generic Audience / Instructional Tone**: **DO NOT** explain general programming concepts, common tools, or basic syntax unless the reference examples specifically do so in a similar context. **CRITICAL: DO NOT adopt an instructional or textbook-like tone.** Focus on the specifics of *this particular process* and the decisions *you* made. Assume the reader has the necessary background context or is primarily interested in *your* experience.
-- **REJECT Formal/Academic Language**: Use simple, direct language. **Avoid** unnecessarily complex sentence structures or vocabulary not found in the reference examples. Match the natural, sometimes informal, conversational tone seen in the examples.
-- **DO NOT Create Polished Narratives**: **Explicitly include** the dead ends, bugs encountered, mistakes made, inefficient paths taken, and moments of confusion. The goal is to document the *real, messy process*, not a sanitized or idealized version.
-- **ENSURE Varied Sentence Structure**: **Actively vary** sentence length and beginnings. Avoid long sequences of sentences starting with "I did X. Then I did Y. Next, I did Z." Mix simple and slightly more complex sentences naturally to mimic human writing patterns.
-- **NO MENTION OF AI:** The generated blog post **MUST NOT** contain any reference to GitHub Copilot, the AI assistant, the chat interface, or the process of interacting with the AI. It must read as if written solely by the human developer.
+- **NO Overly Polished or Linear Narratives**: **DO NOT** clean up the development process to make it seem smooth or inevitable. Include false starts, pivots, and honest assessments of what didn't work.
+- **AVOID Hiding Design Process Messiness**: **DO NOT** present final solutions without showing the iterative thinking, brainstorming lists, and decision-making process that led to them.
+- **ELIMINATE Formal Technical Writing**: **DO NOT** use academic or overly professional language. Maintain the casual, conversational tone even when discussing complex technical concepts.
+- **NO Suppression of Uncertainty**: **DO NOT** hide areas where decisions haven't been made or problems haven't been solved. Include open questions and areas of ongoing exploration.
+- **AVOID Generic Problem-Solution Templates**: **DO NOT** force every section into a rigid problem-solution format if the actual development was more exploratory or iterative.
+- **NO Removal of Personal Reactions**: **DO NOT** sanitize honest reactions to tools, processes, or constraints. Include authentic assessments and preferences.
+- **ELIMINATE Overly Structured Lists**: **DO NOT** force natural thought processes into rigid organizational structures. Allow for organic flow and tangential thinking.
+- **NO MENTION OF AI**: The generated blog post **MUST NOT** contain any reference to GitHub Copilot, the AI assistant, the chat interface, or the process of interacting with AI. It must read as if written solely by the human developer.
+- **AVOID Removing Constraints and Context**: **DO NOT** document technical decisions without the constraints, feedback, and real-world factors that influenced them.
+- **NO Over-Explanation of Obvious Decisions**: **DO NOT** laboriously explain routine technical choices. Focus explanation on areas where the decision-making process was genuinely complex or interesting.
 
 ### 🔗 Reference Examples (Canonical Source for Style Emulation)
 
@@ -259,11 +452,30 @@ In addition to the chat commands in `/`, the following behaviors are defined for
 
 ### `write a blog post` (or similar requests)
 
-1. **Input:** Use the technical context from the current chat session (code generated, problems solved, decisions made, errors encountered).
-2. **Action:** Generate a development log / blog post.
-3. **Style:** **Strictly adhere** to all rules in the "📝 **Writing Documentation Logs (Blog Format)**" section, emulating the **Reference Examples**.
-4. **Constraint:** The output **MUST NOT** mention GitHub Copilot, AI, or the chat interaction itself.
-5. **Output:** Save the generated Markdown content to a new file in `/Documentation/Posts/` (create directory if needed). Suggest filename `YYYY-MM-DD-topic-summary.md`.
+1. **Input:** Use ALL technical context from the current chat session since the last `write a blog post` command was used (or from the beginning if this is the first use). Include code generated, problems solved, decisions made, errors encountered, and the complete development narrative.
+2. **Context Continuity:** **MANDATORY** - Before generating new content:
+   - Search for and analyze existing blog posts in the project (`/Documentation/Posts/`, `/docs/`, `/blog/`, or similar directories)
+   - Reference previous posts where relevant to create narrative continuity
+   - Build upon previous work to show project evolution and connect developments
+   - Acknowledge and reference earlier decisions, pivots, or approaches documented in previous posts
+3. **Action:** Generate a development log / blog post that captures the complete development narrative since the last post.
+4. **Style:** **Strictly adhere** to all rules in the "📝 **Writing Documentation Logs (Blog Format)**" section, emulating the **Reference Examples**.
+5. **Context Utilization:** Extract and utilize:
+   - Specific technical decisions made during the session
+   - Debugging processes and their outcomes
+   - Failed approaches and why they didn't work
+   - Tool/library choices and rationale
+   - Configuration changes and their effects
+   - Any research or documentation consulted
+   - Evolution from previous development phases
+6. **Reference Integration:** If specific reference examples are available in the chat context, use them as primary style guides. If not available, request access to the most relevant examples based on project type.
+7. **Constraint:** The output **MUST NOT** mention GitHub Copilot, AI, or the chat interaction itself.
+8. **Directory Structure:** **MANDATORY** - Create appropriate directory structure for the project:
+   - For code projects: `/Documentation/Posts/` or `/docs/blog/`
+   - For academic/research projects: `/Documentation/` or `/docs/`
+   - Ensure the chosen structure aligns with existing project organization
+9. **Output:** Save the generated Markdown content to the appropriate directory. Suggest filename `YYYY-MM-DD-topic-summary.md` or continue existing naming conventions.
+10. **Series Continuity:** Structure the post as part of an ongoing development series, referencing previous posts and setting up future developments when appropriate.
 
 ### `export chat history` (or similar requests)
 
@@ -281,7 +493,57 @@ In addition to the chat commands in `/`, the following behaviors are defined for
 4. **Content:** Follow established best practices for READMEs (Title, Description, Install, Usage, Config, Contributing, License). Populate sections using project context. Adhere to existing structure if updating.
 5. **Guidelines:** Ensure installation/config instructions align with project standards (e.g., `pnpm`, `.env` usage).
 
+### `generate docs` (or similar requests)
+
+1. **Input:** Current codebase context, existing documentation structure, and specific documentation requirements.
+2. **Action:** Generate comprehensive API documentation, architecture docs, or user guides.
+3. **Format:** Use appropriate documentation formats (Markdown, JSDoc, Sphinx for Python, etc.) based on project ecosystem.
+4. **Content:** Include code examples, API references, setup instructions, and troubleshooting guides. Ensure documentation matches actual implementation.
+5. **Directory Structure:** **MANDATORY** - Create and organize documentation in project-appropriate structure:
+   - Technical projects: `/Documentation/` or `/docs/`
+   - API projects: `/docs/api/` with appropriate subdirectories
+   - Libraries: Follow ecosystem conventions (e.g., `/docs/` for general projects, `/sphinx/` for Python)
+   - Ensure consistency with existing project organization
+6. **Maintenance:** Structure documentation to be maintainable and updateable as code evolves.
+7. **Continuous Updates:** **MANDATORY** - When code changes affect documented functionality, automatically update relevant documentation files.
+
+### `review code` (or similar requests)
+
+1. **Input:** Code files, pull requests, or specific functions/modules to review.
+2. **Action:** Provide comprehensive code review focusing on security, performance, maintainability, and adherence to project standards.
+3. **Scope:** Review architecture decisions, potential bugs, code style consistency, test coverage, and documentation completeness.
+4. **Output:** Structured feedback with specific suggestions for improvement, prioritized by impact and effort.
+5. **Standards:** Apply all guidelines from this instruction file during review process.
+6. **Documentation Check:** **MANDATORY** - Verify that changes are properly documented and suggest documentation updates where needed.
+
+## 🔄 Autonomous Workflow Integration
+
+**These behaviors should happen automatically without explicit prompting:**
+
+### Commit Automation
+- **After Major Changes:** Automatically commit completed features, bug fixes, or significant refactoring with descriptive commit messages
+- **Commit Message Format:** Use conventional commit format: `type(scope): description` (e.g., `feat(auth): add JWT token validation`, `docs(api): update endpoint documentation`)
+- **Incremental Commits:** For complex features, make logical incremental commits rather than one large commit
+
+### Documentation Synchronization
+- **Code-Documentation Alignment:** When modifying functions, classes, or APIs, automatically update corresponding documentation
+- **README Maintenance:** Keep README files current with actual project state, installation requirements, and usage examples
+- **Changelog Updates:** Maintain project changelog with significant changes and improvements
+
+### Test Coverage Maintenance
+- **Automatic Test Generation:** When adding new functionality, automatically generate appropriate test cases
+- **Test Updates:** When modifying existing functionality, update relevant tests to maintain coverage
+- **Test Documentation:** Ensure test files include clear descriptions of what is being tested and why
+
+### Project Organization
+- **Directory Structure:** Automatically create and maintain logical project directory structures
+- **File Organization:** Ensure files are placed in appropriate directories following project conventions
+- **Dependency Management:** Keep dependency files (package.json, requirements.txt, etc.) organized and up-to-date
+
 ---
 
 > Place this file in .github/copilot-instructions.md within your repository to apply these guidelines. Regularly review and update these instructions as project standards evolve and best practices for AI interaction emerge.
->
+> 
+> **Version:** 2025.1 - Last updated: January 2025
+> **Compatibility:** Optimized for GitHub Copilot Chat and VS Code integration
+> **Scope:** Full-stack development with emphasis on TypeScript, Python, React, and modern web technologies
