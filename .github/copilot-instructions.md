@@ -294,6 +294,7 @@ Follow consistent structure across projects (backend, frontend, full-stack):
     Avoid comments that merely restate what the code does (e.g., `// increment counter`). Ensure comments are concise and add significant value beyond what the code already communicates.
 - **Consistency:** Maintain consistency with the existing codebase's style, patterns, and conventions, even if they differ slightly from general best practices (unless specifically tasked with refactoring).
 - **Actively Discourage Duplication:** Actively avoid generating duplicated or near-duplicated code blocks. If similar logic is required in multiple locations, **propose creating reusable functions, methods, classes, modules, or components**. Suggest refactoring opportunities where existing code could be generalized for reuse.
+- **Static Documentation Principle:** When generating or updating documentation (especially README files), always write in present tense describing current capabilities. Avoid phrases like "recently added," "new feature," "updated to include," or references to development timeline. Focus on what the project **is** and **does** today, not its evolution.
 - **Mandatory Source Attribution:** **ALL** significant code blocks, algorithms, complex logic structures, non-trivial configurations, or specific implementation techniques generated or adapted by Copilot that are derived from or inspired by *any* external source **MUST** be documented. External sources include, but are not limited to:
     - Specific documentation pages (e.g., API docs, framework guides)
     - Online tutorials or articles (e.g., blog posts, guides)
@@ -487,11 +488,25 @@ In addition to the chat commands in `/`, the following behaviors are defined for
 
 ### `write a readme` (or similar requests)
 
-1. **Input:** Project context (file structure, code, dependencies) and chat context.
-2. **Action:** Generate or update a `README.md` file.
+1. **Input:** Project context (file structure, code, dependencies) and current codebase state.
+2. **Action:** Generate or update a `README.md` file as static project documentation.
 3. **Location:** Project root directory by default, unless user specifies otherwise.
-4. **Content:** Follow established best practices for READMEs (Title, Description, Install, Usage, Config, Contributing, License). Populate sections using project context. Adhere to existing structure if updating.
-5. **Guidelines:** Ensure installation/config instructions align with project standards (e.g., `pnpm`, `.env` usage).
+4. **Content Structure:** Follow established README patterns:
+   - **Project Title & Description**: Clear, concise overview of what the project does
+   - **Features & Capabilities**: Current functionality and key features
+   - **Installation**: Dependencies and setup instructions
+   - **Usage**: Examples and basic usage patterns
+   - **Configuration**: Environment variables and configuration options
+   - **API/Interface**: Key endpoints, components, or hardware interfaces
+   - **Contributing**: Development setup and contribution guidelines
+   - **License**: Project licensing information
+5. **Documentation Philosophy**: 
+   - Present the **current state** of the project, not its history or planned features
+   - Focus on what the project **does** and **how to use it** today
+   - Avoid changelog-style language or references to recent updates
+   - Write as definitive documentation of existing capabilities
+   - Include working examples and practical usage scenarios
+6. **Technical Accuracy**: Ensure all code examples, commands, and configuration match the actual project setup. Verify dependencies, package managers, and build tools align with project standards.
 
 ### `generate docs` (or similar requests)
 
@@ -527,7 +542,7 @@ In addition to the chat commands in `/`, the following behaviors are defined for
 
 ### Documentation Synchronization
 - **Code-Documentation Alignment:** When modifying functions, classes, or APIs, automatically update corresponding documentation
-- **README Maintenance:** Keep README files current with actual project state, installation requirements, and usage examples
+- **README Maintenance:** Keep README files current with actual project state as static documentation. Focus on current capabilities, installation requirements, and usage examples. Avoid changelog-style updates or historical references. Present the project as it exists today.
 - **Changelog Updates:** Maintain project changelog with significant changes and improvements
 
 ### Test Coverage Maintenance
