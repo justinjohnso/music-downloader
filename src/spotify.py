@@ -37,7 +37,7 @@ def get_spotify_tracks(spotify_link: str) -> Tuple[List[Dict[str, str]], Dict[st
     Returns:
         Tuple of (tracks list, info dict with 'is_playlist' and 'name')
     """
-    from .config import load_config  # Import here to avoid circular import
+    from src.config import load_config  # Import here to avoid circular import
 
     # Load configuration from mdl-config.toml file
     config_data = load_config()

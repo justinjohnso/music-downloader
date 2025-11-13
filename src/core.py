@@ -127,7 +127,7 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
         is_playlist: Whether this is from a Spotify playlist
         playlist_name: Name of the playlist if applicable
     """
-    from .config import load_config, ensure_streamrip_config_exists, apply_config_overrides
+    from src.config import load_config, ensure_streamrip_config_exists, apply_config_overrides
 
     # Load configuration from mdl-config.toml
     config_data = load_config()
@@ -241,7 +241,7 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
         config_path (str, optional): Path to streamrip config file.
         verbose (bool): Whether to print detailed output.
     """
-    from .config import load_config, ensure_streamrip_config_exists, apply_config_overrides
+    from src.config import load_config, ensure_streamrip_config_exists, apply_config_overrides
 
     # Load configuration from mdl-config.toml
     config_data = load_config()
@@ -311,7 +311,7 @@ async def process_spotify_link(spotify_link: str, config_path: str = None, verbo
         config_path: Path to streamrip config file
         verbose: Whether to print detailed output
     """
-    from .spotify import get_spotify_tracks
+    from src.spotify import get_spotify_tracks
 
     try:
         # Get tracks from Spotify

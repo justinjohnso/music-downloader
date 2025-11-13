@@ -27,6 +27,22 @@ It utilizes:
 - Cross-platform support (macOS, Windows, Linux)
 - Verbose output option for detailed logging
 
+## Supported Commands
+
+This tool supports two modes:
+
+### CLI Mode (Command Line)
+Run with arguments for terminal usage:
+
+1. **Search queries**: Simple text like `"Artist - Song Title"` for downloading individual tracks
+2. **Spotify links/URIs**: URLs or URIs for Spotify tracks or playlists
+3. **Verbose option**: Add `--verbose` for detailed output
+
+### GUI Mode (Graphical Interface)
+Run `mdl --gui` or `mdl-gui` to launch a user-friendly graphical interface with input fields for queries, verbose options, and a config tab to modify all download settings.
+
+**Note**: This is a simplified wrapper around streamrip. For advanced commands like searching by artist, album, or specific sources (e.g., `rip search deezer artist "Red Hot Chili Peppers"`), use streamrip directly since it's installed as a dependency.
+
 ## Installation
 
 ### Prerequisites
@@ -58,9 +74,10 @@ It utilizes:
    # Edit mdl-config.toml with your credentials and preferences
    ```
 
-`pipx install .` creates two command shortcuts globally:
-- **`mdl`** – Shorthand command
-- **`music-downloader`** – Full command name
+`pipx install .` creates three command shortcuts globally:
+- **`mdl`** – Shorthand CLI command
+- **`mdl-gui`** – GUI launcher
+- **`music-downloader`** – Full CLI command name
 
 Both commands are available system-wide and work from any directory.
 
@@ -91,6 +108,8 @@ At minimum, set up Deezer or Qobuz credentials in the `[deezer]` or `[qobuz]` se
 
 Customize download behavior in the `[downloads]`, `[artwork]`, `[filepaths]`, and other sections. All streamrip options are supported - see `mdl-config-example.toml` for the full list.
 
+**Security Note:** Never commit `mdl-config.toml` to version control if it contains sensitive credentials.
+
 ## Usage
 
 After installation, use the `mdl` shorthand command:
@@ -111,19 +130,37 @@ mdl "spotify:track:0aym2LBJBk9DAYuHHutrIl"
 # Show verbose output during download
 mdl --verbose "Daft Punk - One More Time"
 
+# Launch GUI
+mdl --gui
+# or
+mdl-gui
+
 # Get help on command-line options
 mdl --help
 ```
 
-### Supported Commands
+### Alternative: Using Python Directly
 
-This tool supports two types of inputs:
+If the `mdl` command isn't available:
 
-1. **Search queries**: Simple text like `"Artist - Song Title"` for downloading individual tracks
-2. **Spotify links/URIs**: URLs or URIs for Spotify tracks or playlists
+```bash
+python -m src.downloader "The Beatles - Hey Jude"
+```
 
-**Note**: This is a simplified wrapper around streamrip. For advanced commands like searching by artist, album, or specific sources, use streamrip directly (e.g., `rip search deezer artist "Red Hot Chili Peppers"`).
+Or use the longer command name:
 
+```bash
+music-downloader "The Beatles - Hey Jude"
+```
+
+## Dependencies
+
+- `streamrip>=2.0.0` – Handles Deezer/Qobuz downloads
+- `spotipy` – Spotify Web API client
+- `tomlkit` – Configuration file parsing
+- `appdirs` – Platform-specific directory paths
+
+Install all with: `pip install -r requirements.txt`
 
 ## Troubleshooting
 
