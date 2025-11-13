@@ -20,6 +20,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+poetry.lock
 .pytest_cache/
 .cache
 
@@ -66,8 +67,9 @@ streamrip/
 logs/
 
 # Local configuration
-config.toml
+mdl-config.toml
 .config/
+AGENTS.md
 
 # Jupyter Notebooks (if used for development/testing)
 .ipynb_checkpoints
