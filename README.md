@@ -66,18 +66,14 @@ Both commands are available system-wide and work from any directory.
 
 ## Configuration
 
-The `mdl-config.toml` file contains all Streamrip configuration variables. You can manage the entire Streamrip configuration through this TOML file instead of editing the streamrip config.toml directly.
+The `mdl-config.toml` file allows you to override all streamrip configuration options.
 
-### Setup
+### Quick Setup
 
-1. Copy `mdl-config-example.toml` to `mdl-config.toml` in your project root
-2. Edit the values in `mdl-config.toml` as needed
+1. Copy the example config: `cp mdl-config-example.toml mdl-config.toml`
+2. Edit `mdl-config.toml` with your credentials and preferences
 
-```bash
-cp mdl-config-example.toml mdl-config.toml
-```
-
-#### Spotify Credentials (Required for Spotify links)
+### Required: Spotify Credentials (for Spotify links)
 
 ```toml
 [spotify]
@@ -85,167 +81,15 @@ client_id = "your_spotify_client_id"
 client_secret = "your_spotify_client_secret"
 ```
 
-**Where to get them:**
-1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/)
-2. Create or select an application
-3. Find your Client ID and Client Secret
-4. Add them to `mdl-config.toml`
+Get these from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/).
 
-#### Service Credentials
+### Required: Service Credentials
 
-##### Deezer
-```toml
-[deezer]
-arl = "your_deezer_arl_cookie"
-quality = 1
-lower_quality_if_not_available = true
-use_deezloader = false
-deezloader_warnings = true
-```
+At minimum, set up Deezer or Qobuz credentials in the `[deezer]` or `[qobuz]` sections. See `mdl-config-example.toml` for all options and detailed setup instructions for each service (Deezer ARL, Qobuz login, etc.).
 
-**How to find your Deezer ARL:**
-1. Open [Deezer Web Player](https://www.deezer.com/) and log in
-2. Open your browser's Developer Tools (F12 or Cmd+Option+I)
-3. Go to the **Application** or **Storage** tab
-4. Navigate to **Cookies**
-5. Find the cookie named `arl`
-6. Copy its value and add to `mdl-config.toml`: `arl = "copied_value"`
+### Optional: Download Settings
 
-##### Qobuz
-```toml
-[qobuz]
-email_or_userid = "your_email_or_user_id"
-password_or_token = "your_password_or_auth_token"
-use_auth_token = false
-app_id = "175774"
-quality = 2
-download_booklets = false
-secrets = ""
-```
-
-##### Tidal
-```toml
-[tidal]
-user_id = "your_user_id"
-country_code = "your_country_code"
-access_token = "your_access_token"
-refresh_token = "your_refresh_token"
-token_expiry = 0.0
-quality = 2
-download_videos = false
-```
-
-##### SoundCloud
-```toml
-[soundcloud]
-client_id = "your_client_id"
-app_version = "your_app_version"
-quality = 0
-```
-
-##### YouTube
-```toml
-[youtube]
-video_downloads_folder = "path/to/youtube/videos"
-quality = 0
-download_videos = false
-```
-
-#### Download Configuration
-```toml
-[downloads]
-folder = "~/StreamripDownloads"
-source_subdirectories = true
-disc_subdirectories = true
-concurrency = true
-max_connections = 10
-requests_per_minute = 60
-verify_ssl = true
-```
-
-#### Artwork Configuration
-```toml
-[artwork]
-embed = true
-embed_size = "large"
-embed_max_width = -1
-save_artwork = false
-saved_max_width = -1
-```
-
-#### Metadata Configuration
-```toml
-[metadata]
-set_playlist_to_album = false
-renumber_playlist_tracks = false
-exclude = []
-```
-
-#### File Path Configuration
-```toml
-[filepaths]
-add_singles_to_folder = false
-folder_format = "{albumartist}/{album}"
-track_format = "{tracknumber}. {title}"
-restrict_characters = true
-truncate_to = 120
-```
-
-#### Audio Conversion Configuration
-```toml
-[conversions]
-enabled = false
-codec = "FLAC"
-sampling_rate = 48000
-bit_depth = 16
-lossy_bitrate = 320
-```
-
-#### Qobuz Filters
-```toml
-[qobuz_filters]
-extras = true
-repeats = true
-non_albums = true
-features = true
-non_studio_albums = true
-non_remaster = true
-```
-
-#### Database Configuration
-```toml
-[database]
-downloads_enabled = true
-downloads_path = "~/.local/share/streamrip/downloads.db"
-failed_downloads_enabled = true
-failed_downloads_path = "~/.local/share/streamrip/failed_downloads.db"
-```
-
-#### LastFM Configuration
-```toml
-[lastfm]
-source = "lastfm"
-fallback_source = "musicbrainz"
-```
-
-#### CLI Configuration
-```toml
-[cli]
-text_output = true
-progress_bars = true
-max_search_results = 10
-```
-
-#### Miscellaneous Configuration
-```toml
-[misc]
-version = "2.2.0"
-check_for_updates = true
-```
-
-**Security Note:** Never commit the `mdl-config.toml` file to version control if it contains sensitive information like API keys or passwords. Add it to `.gitignore` if needed.
-
-For detailed information about each configuration option, refer to the [Streamrip documentation](https://github.com/nathom/streamrip).
+Customize download behavior in the `[downloads]`, `[artwork]`, `[filepaths]`, and other sections. All streamrip options are supported - see `mdl-config-example.toml` for the full list.
 
 ## Usage
 
@@ -267,43 +111,19 @@ mdl "spotify:track:0aym2LBJBk9DAYuHHutrIl"
 # Show verbose output during download
 mdl --verbose "Daft Punk - One More Time"
 
-# Specify a non-default streamrip config file
-mdl --config ~/.config/streamrip/alternative_config.toml "query or link"
-
 # Get help on command-line options
 mdl --help
 ```
 
-### Alternative: Using Python Directly
+### Supported Commands
 
-If the `mdl` command isn't available:
+This tool supports two types of inputs:
 
-```bash
-python -m src.downloader "The Beatles - Hey Jude"
-```
+1. **Search queries**: Simple text like `"Artist - Song Title"` for downloading individual tracks
+2. **Spotify links/URIs**: URLs or URIs for Spotify tracks or playlists
 
-Or use the longer command name:
+**Note**: This is a simplified wrapper around streamrip. For advanced commands like searching by artist, album, or specific sources, use streamrip directly (e.g., `rip search deezer artist "Red Hot Chili Peppers"`).
 
-```bash
-music-downloader "The Beatles - Hey Jude"
-```
-
-### Alternative: Using Python Directly
-
-If the `mdl` command isn't available:
-
-```bash
-python -m src.downloader "The Beatles - Hey Jude"
-```
-
-## Dependencies
-
-- `streamrip>=2.0.0` – Handles Deezer/Qobuz downloads
-- `spotipy` – Spotify Web API client
-- `tomlkit` – Configuration file parsing
-- `appdirs` – Platform-specific directory paths
-
-Install all with: `pip install -r requirements.txt`
 
 ## Troubleshooting
 
