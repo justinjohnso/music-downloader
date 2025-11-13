@@ -2,10 +2,16 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages]
+find = {}
+
 [project]
 name = "music-downloader"
-version = "0.1.0"
-description = "Downloads songs from Spotify playlists using Streamrip"
+version = "1.0"
+description = "A Python CLI tool for downloading music from Deezer (with Qobuz fallback) based on search queries or Spotify links/URIs"
 readme = "README.md"
 requires-python = "<4.0,>=3.10"
 license = "MIT"  # Use license field instead of classifier
@@ -16,13 +22,10 @@ classifiers = [
 dependencies = [
     "streamrip",
     "spotipy",
-    "python-dotenv",
+    "tomlkit",
     "appdirs",
 ]
 
 [project.scripts]
-music-downloader = "src.downloader:main"  # Updated path to find main() in src/downloader.py
-
-# Use a src-layout
-[tool.setuptools]
-packages = ["src"]
+music-downloader = "src.downloader:main"
+mdl = "src.downloader:main"
