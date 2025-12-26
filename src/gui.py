@@ -10,31 +10,21 @@ from .core import process_spotify_link, download_track
 
 async def run_download(query, verbose=False):
     """Run the download in asyncio"""
-    if verbose:
-        old_stdout = sys.stdout
-        captured_output = io.StringIO()
-        sys.stdout = captured_output
-        try:
-            if is_spotify_link(query):
-                await process_spotify_link(query, None, verbose)
-            else:
-                await download_track(query, None, verbose)
-            output = captured_output.getvalue()
-            return output or "Download completed successfully!"
-        except Exception as e:
-            output = captured_output.getvalue()
-            return output + f"\nError: {str(e)}"
-        finally:
-            sys.stdout = old_stdout
-    else:
-        try:
-            if is_spotify_link(query):
-                await process_spotify_link(query, None, verbose)
-            else:
-                await download_track(query, None, verbose)
-            return "Download completed successfully!"
-        except Exception as e:
-            return f"Error: {str(e)}"
+    old_stdout = sys.stdout
+    captured_output = io.StringIO()
+    sys.stdout = captured_output
+    try:
+        if is_spotify_link(query):
+            await process_spotify_link(query, None, verbose)
+        else:
+            await download_track(query, None, verbose)
+        output = captured_output.getvalue()
+        return output or "Download completed successfully!"
+    except Exception as e:
+        output = captured_output.getvalue()
+        return output + f"\nError: {str(e)}"
+    finally:
+        sys.stdout = old_stdout
 
 def launch_gui():
     """Launch the GUI"""
