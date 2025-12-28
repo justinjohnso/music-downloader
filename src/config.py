@@ -8,11 +8,30 @@ from streamrip.config import Config
 
 
 def load_config() -> dict:
-    """Load configuration from mdl-config.toml file."""
-    config_path = Path.cwd() / "mdl-config.toml"
-    if config_path.exists():
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return tomlkit.parse(f.read())
+    """Load configuration from mdl-config.toml file.
+    
+    Searches for the config file in the following order:
+    1. Current working directory
+    2. User's home directory
+    3. ~/.config/music-downloader/ (Linux/macOS)
+    """
+    search_paths = [
+        Path.cwd() / "mdl-config.toml",
+        Path.home() / "mdl-config.toml",
+    ]
+    
+    # Add platform-specific config directory
+    if sys.platform == "darwin":  # macOS
+        search_paths.append(Path.home() / "Library/Application Support/music-downloader/mdl-config.toml")
+    elif sys.platform == "win32":  # Windows
+        search_paths.append(Path.home() / "AppData/Roaming/music-downloader/mdl-config.toml")
+    else:  # Linux and others
+        search_paths.append(Path.home() / ".config/music-downloader/mdl-config.toml")
+    
+    for config_path in search_paths:
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                return tomlkit.parse(f.read())
     return {}
 
 
