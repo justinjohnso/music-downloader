@@ -22,15 +22,19 @@ def load_config_with_path() -> tuple[dict, str | None]:
 
     # Add platform-specific config directory
     if sys.platform == "darwin":  # macOS
-        search_paths.append(Path.home() / "Library/Application Support/music-downloader/mdl-config.toml")
+        search_paths.append(
+            Path.home() / "Library/Application Support/music-downloader/mdl-config.toml"
+        )
     elif sys.platform == "win32":  # Windows
-        search_paths.append(Path.home() / "AppData/Roaming/music-downloader/mdl-config.toml")
+        search_paths.append(
+            Path.home() / "AppData/Roaming/music-downloader/mdl-config.toml"
+        )
     else:  # Linux and others
         search_paths.append(Path.home() / ".config/music-downloader/mdl-config.toml")
 
     for config_path in search_paths:
         if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 return tomlkit.parse(f.read()), str(config_path)
     return {}, None
 
@@ -45,6 +49,40 @@ def load_config() -> dict:
     """
     data, _ = load_config_with_path()
     return data
+
+
+def get_backend_config(
+    config_data: dict | None = None,
+) -> tuple[str | None, str | None]:
+    """Get optional backend Spotify resolve settings from mdl-config.toml.
+
+    Args:
+        config_data: Optional parsed config data. If omitted, config is loaded.
+
+    Returns:
+        Tuple of (resolve_url, api_key). Missing/blank values are returned as None.
+    """
+    if config_data is None:
+        config_data = load_config()
+
+    backend = config_data.get("backend", {})
+    if not isinstance(backend, dict):
+        return None, None
+
+    resolve_url = backend.get("resolve_url")
+    api_key = backend.get("api_key")
+
+    if isinstance(resolve_url, str):
+        resolve_url = resolve_url.strip() or None
+    else:
+        resolve_url = None
+
+    if isinstance(api_key, str):
+        api_key = api_key.strip() or None
+    else:
+        api_key = None
+
+    return resolve_url, api_key
 
 
 def ensure_streamrip_config_exists() -> str:
@@ -62,7 +100,9 @@ def ensure_streamrip_config_exists() -> str:
     config_path = get_default_config_path()
 
     if not Path(config_path).exists():
-        print(f"Streamrip config not found at {config_path}, creating default config...")
+        print(
+            f"Streamrip config not found at {config_path}, creating default config..."
+        )
         Path(config_path).parent.mkdir(parents=True, exist_ok=True)
         set_user_defaults(config_path)
         print(f"Created default streamrip config at {config_path}")
@@ -80,7 +120,9 @@ def get_default_config_path() -> str:
         return str(Path.home() / ".config/streamrip/config.toml")
 
 
-def merge_mdl_config_into_streamrip(streamrip_config_path: str, mdl_config_data: dict) -> None:
+def merge_mdl_config_into_streamrip(
+    streamrip_config_path: str, mdl_config_data: dict
+) -> None:
     """Merge mdl-config.toml values into streamrip's config.toml on disk.
 
     Reads streamrip's config, patches matching sections/keys with values from
@@ -99,16 +141,27 @@ def merge_mdl_config_into_streamrip(streamrip_config_path: str, mdl_config_data:
 
     # Sections whose names match between mdl-config and streamrip config
     MERGE_SECTIONS = {
-        'downloads', 'qobuz', 'tidal', 'deezer', 'soundcloud', 'youtube',
-        'artwork', 'metadata', 'filepaths', 'database', 'lastfm', 'cli', 'misc',
+        "downloads",
+        "qobuz",
+        "tidal",
+        "deezer",
+        "soundcloud",
+        "youtube",
+        "artwork",
+        "metadata",
+        "filepaths",
+        "database",
+        "lastfm",
+        "cli",
+        "misc",
     }
 
     # Special mappings: mdl-config key -> streamrip config key
     SPECIAL_MAPPINGS = {
-        'conversions': 'conversion',
+        "conversions": "conversion",
     }
 
-    with open(streamrip_config_path, 'r', encoding='utf-8') as f:
+    with open(streamrip_config_path, "r", encoding="utf-8") as f:
         sr_config = tomlkit.parse(f.read())
 
     for mdl_section, mdl_values in mdl_config_data.items():
@@ -130,14 +183,14 @@ def merge_mdl_config_into_streamrip(streamrip_config_path: str, mdl_config_data:
         for key, value in mdl_values.items():
             if key in sr_config[sr_section]:
                 # Never override streamrip's internal version marker
-                if sr_section == 'misc' and key == 'version':
+                if sr_section == "misc" and key == "version":
                     continue
                 # Expand ~ in downloads.folder
-                if mdl_section == 'downloads' and key == 'folder':
+                if mdl_section == "downloads" and key == "folder":
                     value = os.path.expanduser(value)
                 sr_config[sr_section][key] = value
 
-    with open(streamrip_config_path, 'w', encoding='utf-8') as f:
+    with open(streamrip_config_path, "w", encoding="utf-8") as f:
         f.write(tomlkit.dumps(sr_config))
 
 
@@ -154,6 +207,7 @@ def _get_mdl_config_dir() -> Path:
 def _validate_deezer_arl(arl: str) -> bool:
     """Attempt to validate a Deezer ARL by logging in."""
     import asyncio
+
     try:
         from streamrip.client import DeezerClient
         from streamrip.config import Config
@@ -172,7 +226,15 @@ def _validate_deezer_arl(arl: str) -> bool:
         return False
 
 
-def _build_config_toml(arl: str, quality: int, folder: str, spotify_id: str = "", spotify_secret: str = "") -> str:
+def _build_config_toml(
+    arl: str,
+    quality: int,
+    folder: str,
+    spotify_id: str = "",
+    spotify_secret: str = "",
+    backend_resolve_url: str = "",
+    backend_api_key: str = "",
+) -> str:
     """Build the mdl-config.toml content string."""
     lines = [
         "# Music Downloader Configuration",
@@ -190,12 +252,24 @@ def _build_config_toml(arl: str, quality: int, folder: str, spotify_id: str = ""
     ]
 
     if spotify_id and spotify_secret:
-        lines.extend([
-            "",
-            "[spotify]",
-            f'client_id = "{spotify_id}"',
-            f'client_secret = "{spotify_secret}"',
-        ])
+        lines.extend(
+            [
+                "",
+                "[spotify]",
+                f'client_id = "{spotify_id}"',
+                f'client_secret = "{spotify_secret}"',
+            ]
+        )
+
+    if backend_resolve_url and backend_api_key:
+        lines.extend(
+            [
+                "",
+                "[backend]",
+                f'resolve_url = "{backend_resolve_url}"',
+                f'api_key = "{backend_api_key}"',
+            ]
+        )
 
     return "\n".join(lines) + "\n"
 
@@ -207,7 +281,9 @@ def run_setup_wizard() -> None:
     # 1. Deezer ARL
     print("Step 1: Deezer ARL (required)")
     print("Your Deezer ARL is an authentication cookie that lets you download music.")
-    print("Get it at: https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie")
+    print(
+        "Get it at: https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie"
+    )
     print("ARLs expire every 3-4 months — you'll need to refresh it periodically.\n")
 
     arl = ""
@@ -221,7 +297,9 @@ def run_setup_wizard() -> None:
     arl_valid = _validate_deezer_arl(arl)
     if not arl_valid:
         print("Warning: Could not validate ARL. It may be expired or invalid.")
-        print("Continuing anyway — you can update it later by running 'mdl --setup' again.\n")
+        print(
+            "Continuing anyway — you can update it later by running 'mdl --setup' again.\n"
+        )
     else:
         print("ARL is valid!\n")
 
@@ -241,8 +319,12 @@ def run_setup_wizard() -> None:
 
     # 4. Spotify (optional)
     print("Step 4: Spotify credentials (optional)")
-    print("Spotify credentials are pre-configured for you.")
-    custom_spotify = input("Use your own Spotify credentials instead? [y/N]: ").strip().lower()
+    print(
+        "Spotify credentials are optional and only used as your fallback if provided."
+    )
+    custom_spotify = (
+        input("Add your own Spotify fallback credentials? [y/N]: ").strip().lower()
+    )
 
     spotify_id = ""
     spotify_secret = ""
@@ -253,13 +335,15 @@ def run_setup_wizard() -> None:
     print()
 
     # Build config
-    config_content = _build_config_toml(arl, quality, folder, spotify_id, spotify_secret)
+    config_content = _build_config_toml(
+        arl, quality, folder, spotify_id, spotify_secret
+    )
 
     # Determine config path (platform-specific)
     config_path = _get_mdl_config_dir() / "mdl-config.toml"
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(config_path, 'w', encoding='utf-8') as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         f.write(config_content)
 
     print(f"Config saved to: {config_path}")
@@ -269,4 +353,4 @@ def run_setup_wizard() -> None:
     merge_mdl_config_into_streamrip(sr_path, tomlkit.parse(config_content))
 
     print(f"Streamrip config updated at: {sr_path}")
-    print("\nSetup complete! Try: mdl \"artist - track name\"")
+    print('\nSetup complete! Try: mdl "artist - track name"')
