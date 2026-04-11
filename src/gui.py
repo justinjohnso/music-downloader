@@ -5,8 +5,10 @@ import tomlkit
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QCheckBox, QPushButton, QMessageBox, QTabWidget, QHBoxLayout, QSpinBox, QTextEdit, QScrollArea, QGroupBox, QFormLayout
 from PyQt6.QtCore import QThread, pyqtSignal
 from PyQt6.QtGui import QFont
+from pathlib import Path
 from .spotify import is_spotify_link
 from .core import process_spotify_link, download_track
+from .config import load_config_with_path, _get_mdl_config_dir
 
 async def run_download(query, verbose=False):
     """Run the download in asyncio"""
@@ -102,9 +104,12 @@ def launch_gui():
     config_widgets = {}
     config = {}
 
+    mdl_config, mdl_config_path = load_config_with_path()
+    if mdl_config_path is None:
+        mdl_config_path = str(_get_mdl_config_dir() / "mdl-config.toml")
+    config = mdl_config
+
     try:
-        with open('mdl-config.toml', 'r') as f:
-            config = tomlkit.parse(f.read())
         for section_name, section in config.items():
             if isinstance(section, dict):
                 group = QGroupBox(section_name.upper())
@@ -128,7 +133,7 @@ def launch_gui():
                     config_widgets[(section_name, key)] = widget
                 group.setLayout(form)
                 scroll_layout.addWidget(group)
-    except:
+    except Exception:
         scroll_layout.addWidget(QLabel('Config file not found or error loading'))
 
     scroll_widget.setLayout(scroll_layout)
@@ -190,7 +195,8 @@ def launch_gui():
             else:
                 config[section_name][key] = widget.text()
         try:
-            with open('mdl-config.toml', 'w') as f:
+            Path(mdl_config_path).parent.mkdir(parents=True, exist_ok=True)
+            with open(mdl_config_path, 'w') as f:
                 tomlkit.dump(config, f)
             config_status.setText('Config saved!')
         except Exception as e:
