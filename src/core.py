@@ -1,5 +1,7 @@
 import os
 import asyncio
+from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional, List, Dict
 from streamrip.client import DeezerClient
 from streamrip.config import Config
@@ -8,6 +10,35 @@ from streamrip.exceptions import AuthenticationError, MissingCredentialsError
 from streamrip.media import PendingTrack
 from streamrip.metadata import AlbumMetadata
 from streamrip.media.artwork import download_artwork
+
+AUDIO_EXTENSIONS = {'.mp3', '.flac', '.m4a', '.ogg', '.opus', '.aac', '.wav'}
+
+
+@asynccontextmanager
+async def managed_client(client, verbose: bool = False):
+    """Async context manager that ensures proper cleanup of DeezerClient sessions."""
+    try:
+        yield client
+    finally:
+        if hasattr(client, "session") and client.session:
+            try:
+                if not client.session.closed:
+                    for task in asyncio.all_tasks():
+                        if not task.done() and task != asyncio.current_task():
+                            task.cancel()
+                            try:
+                                await task
+                            except asyncio.CancelledError:
+                                pass
+                    await client.session.close()
+                if hasattr(client.session, "_connector") and client.session._connector:
+                    await client.session._connector.close()
+                await asyncio.sleep(0.1)
+                if verbose:
+                    print("Successfully closed client session")
+            except Exception as e:
+                if verbose:
+                    print(f"Error while closing client session: {e}")
 
 
 async def download_track_with_client(client, config, search_string: str, db=None, verbose: bool = False) -> Optional[str]:
@@ -107,8 +138,23 @@ async def download_track_with_client(client, config, search_string: str, db=None
             resolved = await pending.resolve()
             await resolved.rip()
             print(f"Successfully downloaded '{title}' by {artist}")
-            # Return the expected file path (though we don't have it exactly)
-            return f"{title} by {artist}"  # Placeholder, as exact path is hard to determine
+            # Find the actual downloaded file by scanning for the most recently
+            # modified file whose name contains the title (case-insensitive)
+            title_lower = title.lower() if title else ""
+            best_match = None
+            best_mtime = 0.0
+            for entry in os.scandir(download_folder):
+                if not entry.is_file():
+                    continue
+                p = Path(entry.name)
+                if p.suffix.lower() not in AUDIO_EXTENSIONS:
+                    continue
+                if title_lower and title_lower in entry.name.lower():
+                    mtime = entry.stat().st_mtime
+                    if mtime > best_mtime:
+                        best_mtime = mtime
+                        best_match = entry.path
+            return best_match if best_match else f"{title} by {artist}"
         except Exception as e:
             print(f"Error downloading track: {e}")
             return None
@@ -128,7 +174,7 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
         is_playlist: Whether this is from a Spotify playlist
         playlist_name: Name of the playlist if applicable
     """
-    from src.config import load_config, ensure_streamrip_config_exists, apply_config_overrides
+    from src.config import load_config, ensure_streamrip_config_exists, merge_mdl_config_into_streamrip
 
     # Load configuration from mdl-config.toml
     config_data = load_config()
@@ -136,30 +182,31 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
     # Use provided config path or ensure default exists
     config_path = config_path or ensure_streamrip_config_exists()
 
+    # Merge mdl settings into streamrip's config on disk before loading
+    merge_mdl_config_into_streamrip(config_path, config_data)
+
     if verbose:
         print(f"Using config file: {config_path}")
 
     # Load configuration and initialize client (only once for all tracks)
     config = Config(config_path)
-    apply_config_overrides(config, config_data)
-    config.session.update_toml()  # Sync session changes back to file config
     client = DeezerClient(config)
     db = Database(downloads=Dummy(), failed=Dummy())
 
-    try:
+    async with managed_client(client, verbose):
         if verbose:
             arl = config.session.deezer.arl
             print(f"Deezer ARL: {arl[:8]}...{arl[-4:]}" if arl else "Deezer ARL: NOT SET")
         try:
             await client.login()
         except MissingCredentialsError:
-            print("Error: No Deezer ARL found. Set 'arl' in the [deezer] section of mdl-config.toml.")
+            print("No Deezer ARL configured. Run 'mdl --setup' to set one up.")
             return
         except AuthenticationError:
-            print("Error: Deezer ARL is invalid or expired. Update 'arl' in the [deezer] section of mdl-config.toml.")
+            print("Deezer ARL is invalid or expired (they last ~3-4 months). Get a new one:\nhttps://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\nThen run 'mdl --setup' to update it.")
             return
         if not getattr(client, "logged_in", False):
-            print("Error: Deezer login failed. Check your credentials in mdl-config.toml.")
+            print("Deezer login failed. Check your ARL or run 'mdl --setup'.")
             return
         print("Logged in to Deezer.")
 
@@ -168,6 +215,7 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
 
         successful_downloads = 0
         failed_downloads = 0
+        downloaded_files: List[str] = []
 
         total_tracks = len(tracks)
         print(f"Processing {total_tracks} tracks...")
@@ -185,6 +233,7 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
 
             if result:
                 successful_downloads += 1
+                downloaded_files.append(result)
             else:
                 failed_downloads += 1
 
@@ -195,51 +244,24 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
         print(f"\nDownload summary: {successful_downloads} successful, {failed_downloads} failed out of {total_tracks} total")
 
         # Generate M3U playlist file for Spotify playlists
-        if is_playlist and successful_downloads > 0 and playlist_name:
+        if is_playlist and downloaded_files and playlist_name:
             download_folder = config.file.downloads.folder
             # Sanitize playlist name for filename
             safe_name = "".join(c for c in playlist_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
             m3u_filename = f"{safe_name}.m3u"
             m3u_path = os.path.join(download_folder, m3u_filename)
             try:
-                # List all .mp3 files in the download folder
-                mp3_files = [f for f in os.listdir(download_folder) if f.endswith('.mp3')]
-                mp3_files.sort()  # Sort for consistent order
+                # Only include files from this session that are actual paths on disk
+                session_files = sorted(
+                    Path(f).name for f in downloaded_files
+                    if os.path.isfile(f)
+                )
                 with open(m3u_path, 'w', encoding='utf-8') as f:
-                    for mp3 in mp3_files:
-                        f.write(f"{mp3}\n")
+                    for filename in session_files:
+                        f.write(f"{filename}\n")
                 print(f"Generated M3U playlist '{playlist_name}' at: {m3u_path}")
             except Exception as e:
                 print(f"Warning: Could not generate M3U playlist: {e}")
-
-    finally:
-        # Clean up client session
-        if hasattr(client, "session") and client.session:
-            try:
-                if not client.session.closed:
-                    # Cancel any pending requests
-                    for task in asyncio.all_tasks():
-                        if not task.done() and task != asyncio.current_task():
-                            task.cancel()
-                            try:
-                                await task
-                            except asyncio.CancelledError:
-                                pass
-
-                    # Close the session
-                    await client.session.close()
-
-                # Close the connector
-                if hasattr(client.session, "_connector") and client.session._connector:
-                    await client.session._connector.close()
-
-                await asyncio.sleep(0.1)
-
-                if verbose:
-                    print("Successfully closed client session")
-            except Exception as e:
-                if verbose:
-                    print(f"Error while closing client session: {e}")
 
 
 async def download_track(search_string: str, config_path: str = None, verbose: bool = False) -> None:
@@ -251,7 +273,7 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
         config_path (str, optional): Path to streamrip config file.
         verbose (bool): Whether to print detailed output.
     """
-    from src.config import load_config, ensure_streamrip_config_exists, apply_config_overrides
+    from src.config import load_config, ensure_streamrip_config_exists, merge_mdl_config_into_streamrip
 
     # Load configuration from mdl-config.toml
     config_data = load_config()
@@ -259,26 +281,27 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
     # Use provided config path or ensure default exists
     config_path = config_path or ensure_streamrip_config_exists()
 
+    # Merge mdl settings into streamrip's config on disk before loading
+    merge_mdl_config_into_streamrip(config_path, config_data)
+
     if verbose:
         print(f"Using config file: {config_path}")
 
     # Load configuration and initialize client
     config = Config(config_path)
-    apply_config_overrides(config, config_data)
-    config.session.update_toml()  # Sync session changes back to file config
     client = DeezerClient(config)
 
-    try:
+    async with managed_client(client, verbose):
         try:
             await client.login()
         except MissingCredentialsError:
-            print("Error: No Deezer ARL found. Set 'arl' in the [deezer] section of mdl-config.toml.")
+            print("No Deezer ARL configured. Run 'mdl --setup' to set one up.")
             return
         except AuthenticationError:
-            print("Error: Deezer ARL is invalid or expired. Update 'arl' in the [deezer] section of mdl-config.toml.")
+            print("Deezer ARL is invalid or expired (they last ~3-4 months). Get a new one:\nhttps://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\nThen run 'mdl --setup' to update it.")
             return
         if not getattr(client, "logged_in", False):
-            print("Error: Deezer login failed. Check your credentials in mdl-config.toml.")
+            print("Deezer login failed. Check your ARL or run 'mdl --setup'.")
             return
         print("Logged in to Deezer.")
 
@@ -287,35 +310,6 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
 
         # Use the shared download function
         await download_track_with_client(client, config, search_string, verbose=verbose)
-
-    finally:
-        # Clean up client session
-        if hasattr(client, "session") and client.session:
-            try:
-                if not client.session.closed:
-                    # Cancel any pending requests
-                    for task in asyncio.all_tasks():
-                        if not task.done() and task != asyncio.current_task():
-                            task.cancel()
-                            try:
-                                await task
-                            except asyncio.CancelledError:
-                                pass
-
-                    # Close the session
-                    await client.session.close()
-
-                # Close the connector
-                if hasattr(client.session, "_connector") and client.session._connector:
-                    await client.session._connector.close()
-
-                await asyncio.sleep(0.1)
-
-                if verbose:
-                    print("Successfully closed client session")
-            except Exception as e:
-                if verbose:
-                    print(f"Error while closing client session: {e}")
 
 
 async def process_spotify_link(spotify_link: str, config_path: str = None, verbose: bool = False) -> None:
