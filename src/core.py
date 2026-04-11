@@ -2,7 +2,7 @@ import os
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from streamrip.client import DeezerClient
 from streamrip.config import Config
 from streamrip.db import Database, Dummy
@@ -11,7 +11,53 @@ from streamrip.media import PendingTrack
 from streamrip.metadata import AlbumMetadata
 from streamrip.media.artwork import download_artwork
 
-AUDIO_EXTENSIONS = {'.mp3', '.flac', '.m4a', '.ogg', '.opus', '.aac', '.wav'}
+AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wav"}
+
+
+def _print_spotify_configuration_help() -> None:
+    """Print guidance for configuring Spotify metadata resolution."""
+    print(
+        "Spotify metadata lookup requires one of the following in mdl-config.toml:\n"
+        "  [backend] resolve_url + api_key (recommended)\n"
+        "  [spotify] client_id + client_secret (local fallback)"
+    )
+
+
+def _normalize_spotify_payload(
+    tracks: list[dict[str, Any]], info: dict[str, Any], verbose: bool
+) -> tuple[list[dict[str, str]], bool, str | None]:
+    """Normalize Spotify payload returned from backend/local resolver."""
+    normalized_tracks: list[dict[str, str]] = []
+    for index, track in enumerate(tracks):
+        if not isinstance(track, dict):
+            if verbose:
+                print(f"Skipping Spotify track {index + 1}: expected object payload.")
+            continue
+
+        artist = track.get("artist")
+        title = track.get("title")
+        if not isinstance(artist, str) or not isinstance(title, str):
+            if verbose:
+                print(
+                    f"Skipping Spotify track {index + 1}: missing string artist/title."
+                )
+            continue
+
+        artist = artist.strip()
+        title = title.strip()
+        if not artist or not title:
+            if verbose:
+                print(f"Skipping Spotify track {index + 1}: empty artist/title values.")
+            continue
+
+        normalized_tracks.append({"artist": artist, "title": title})
+
+    is_playlist = bool(info.get("is_playlist")) if isinstance(info, dict) else False
+    playlist_name = info.get("name") if isinstance(info, dict) else None
+    if not isinstance(playlist_name, str):
+        playlist_name = None
+
+    return normalized_tracks, is_playlist, playlist_name
 
 
 @asynccontextmanager
@@ -41,7 +87,9 @@ async def managed_client(client, verbose: bool = False):
                     print(f"Error while closing client session: {e}")
 
 
-async def download_track_with_client(client, config, search_string: str, db=None, verbose: bool = False) -> Optional[str]:
+async def download_track_with_client(
+    client, config, search_string: str, db=None, verbose: bool = False
+) -> Optional[str]:
     """
     Search for a track on Deezer using the provided client and download the first result.
 
@@ -112,11 +160,11 @@ async def download_track_with_client(client, config, search_string: str, db=None
                 artwork_folder,
                 album.covers,
                 config.file.artwork,
-                for_playlist=False
+                for_playlist=False,
             )
 
             if verbose:
-                print(f"Downloaded album artwork")
+                print("Downloaded album artwork")
 
             # Create a PendingTrack with all required parameters
             pending = PendingTrack(
@@ -126,7 +174,7 @@ async def download_track_with_client(client, config, search_string: str, db=None
                 config=config,
                 folder=download_folder,
                 db=db,
-                cover_path=cover_path
+                cover_path=cover_path,
             )
         except Exception as e:
             print(f"Error preparing download: {e}")
@@ -163,7 +211,13 @@ async def download_track_with_client(client, config, search_string: str, db=None
         return None
 
 
-async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: str = None, verbose: bool = False, is_playlist: bool = False, playlist_name: Optional[str] = None) -> None:
+async def download_multiple_tracks(
+    tracks: List[Dict[str, str]],
+    config_path: str = None,
+    verbose: bool = False,
+    is_playlist: bool = False,
+    playlist_name: Optional[str] = None,
+) -> None:
     """
     Download multiple tracks from Deezer based on artist and title information.
 
@@ -174,7 +228,11 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
         is_playlist: Whether this is from a Spotify playlist
         playlist_name: Name of the playlist if applicable
     """
-    from src.config import load_config, ensure_streamrip_config_exists, merge_mdl_config_into_streamrip
+    from src.config import (
+        load_config,
+        ensure_streamrip_config_exists,
+        merge_mdl_config_into_streamrip,
+    )
 
     # Load configuration from mdl-config.toml
     config_data = load_config()
@@ -196,14 +254,18 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
     async with managed_client(client, verbose):
         if verbose:
             arl = config.session.deezer.arl
-            print(f"Deezer ARL: {arl[:8]}...{arl[-4:]}" if arl else "Deezer ARL: NOT SET")
+            print(
+                f"Deezer ARL: {arl[:8]}...{arl[-4:]}" if arl else "Deezer ARL: NOT SET"
+            )
         try:
             await client.login()
         except MissingCredentialsError:
             print("No Deezer ARL configured. Run 'mdl --setup' to set one up.")
             return
         except AuthenticationError:
-            print("Deezer ARL is invalid or expired (they last ~3-4 months). Get a new one:\nhttps://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\nThen run 'mdl --setup' to update it.")
+            print(
+                "Deezer ARL is invalid or expired (they last ~3-4 months). Get a new one:\nhttps://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\nThen run 'mdl --setup' to update it."
+            )
             return
         if not getattr(client, "logged_in", False):
             print("Deezer login failed. Check your ARL or run 'mdl --setup'.")
@@ -229,7 +291,9 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
             print(f"\nProcessing track {i+1}/{total_tracks}: {artist} - {title}")
 
             # Use the download function with shared client
-            result = await download_track_with_client(client, config, search_string, db, verbose)
+            result = await download_track_with_client(
+                client, config, search_string, db, verbose
+            )
 
             if result:
                 successful_downloads += 1
@@ -241,22 +305,25 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
             if i < total_tracks - 1:
                 await asyncio.sleep(1)
 
-        print(f"\nDownload summary: {successful_downloads} successful, {failed_downloads} failed out of {total_tracks} total")
+        print(
+            f"\nDownload summary: {successful_downloads} successful, {failed_downloads} failed out of {total_tracks} total"
+        )
 
         # Generate M3U playlist file for Spotify playlists
         if is_playlist and downloaded_files and playlist_name:
             download_folder = config.file.downloads.folder
             # Sanitize playlist name for filename
-            safe_name = "".join(c for c in playlist_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_name = "".join(
+                c for c in playlist_name if c.isalnum() or c in (" ", "-", "_")
+            ).rstrip()
             m3u_filename = f"{safe_name}.m3u"
             m3u_path = os.path.join(download_folder, m3u_filename)
             try:
                 # Only include files from this session that are actual paths on disk
                 session_files = sorted(
-                    Path(f).name for f in downloaded_files
-                    if os.path.isfile(f)
+                    Path(f).name for f in downloaded_files if os.path.isfile(f)
                 )
-                with open(m3u_path, 'w', encoding='utf-8') as f:
+                with open(m3u_path, "w", encoding="utf-8") as f:
                     for filename in session_files:
                         f.write(f"{filename}\n")
                 print(f"Generated M3U playlist '{playlist_name}' at: {m3u_path}")
@@ -264,7 +331,9 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
                 print(f"Warning: Could not generate M3U playlist: {e}")
 
 
-async def download_track(search_string: str, config_path: str = None, verbose: bool = False) -> None:
+async def download_track(
+    search_string: str, config_path: str = None, verbose: bool = False
+) -> None:
     """
     Search for a track on Deezer using the provided search string and download the first result.
 
@@ -273,7 +342,11 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
         config_path (str, optional): Path to streamrip config file.
         verbose (bool): Whether to print detailed output.
     """
-    from src.config import load_config, ensure_streamrip_config_exists, merge_mdl_config_into_streamrip
+    from src.config import (
+        load_config,
+        ensure_streamrip_config_exists,
+        merge_mdl_config_into_streamrip,
+    )
 
     # Load configuration from mdl-config.toml
     config_data = load_config()
@@ -298,7 +371,9 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
             print("No Deezer ARL configured. Run 'mdl --setup' to set one up.")
             return
         except AuthenticationError:
-            print("Deezer ARL is invalid or expired (they last ~3-4 months). Get a new one:\nhttps://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\nThen run 'mdl --setup' to update it.")
+            print(
+                "Deezer ARL is invalid or expired (they last ~3-4 months). Get a new one:\nhttps://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\nThen run 'mdl --setup' to update it."
+            )
             return
         if not getattr(client, "logged_in", False):
             print("Deezer login failed. Check your ARL or run 'mdl --setup'.")
@@ -312,7 +387,9 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
         await download_track_with_client(client, config, search_string, verbose=verbose)
 
 
-async def process_spotify_link(spotify_link: str, config_path: str = None, verbose: bool = False) -> None:
+async def process_spotify_link(
+    spotify_link: str, config_path: str = None, verbose: bool = False
+) -> None:
     """
     Process a Spotify link to download tracks.
 
@@ -325,25 +402,37 @@ async def process_spotify_link(spotify_link: str, config_path: str = None, verbo
 
     try:
         # Get tracks from Spotify
-        print(f"Retrieving track information from Spotify...")
+        print("Retrieving track information from Spotify...")
 
         # Run the synchronous Spotify API call in a thread
-        tracks, info = await asyncio.get_event_loop().run_in_executor(None, get_spotify_tracks, spotify_link)
+        tracks, info = await asyncio.get_event_loop().run_in_executor(
+            None, get_spotify_tracks, spotify_link
+        )
 
-        if not tracks:
+        normalized_tracks, is_playlist, playlist_name = _normalize_spotify_payload(
+            tracks, info, verbose
+        )
+
+        if not normalized_tracks:
             print("No tracks found in the Spotify link.")
             return
 
-        print(f"Found {len(tracks)} tracks")
+        print(f"Found {len(normalized_tracks)} tracks")
 
         # Download tracks
-        playlist_name = info['name'] if info['is_playlist'] else None
-        await download_multiple_tracks(tracks, config_path, verbose, info['is_playlist'], playlist_name)
+        await download_multiple_tracks(
+            normalized_tracks, config_path, verbose, is_playlist, playlist_name
+        )
 
     except (AuthenticationError, MissingCredentialsError):
         pass  # Already handled in download_multiple_tracks
     except Exception as e:
         print(f"Error processing Spotify link: {e}")
+        if "Spotify backend request failed" in str(
+            e
+        ) or "Spotify is not configured" in str(e):
+            _print_spotify_configuration_help()
         if verbose:
             import traceback
+
             traceback.print_exc()

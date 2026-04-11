@@ -1,0 +1,115 @@
+name: Backend Deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/**"
+      - "deploy/**"
+      - ".github/workflows/backend-deploy.yml"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref to deploy (defaults to the triggering commit)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy backend to DigitalOcean VPS
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VPS_HOST: ${{ secrets.DO_VPS_HOST }}
+      VPS_USER: ${{ secrets.DO_VPS_USER }}
+      VPS_PORT: ${{ secrets.DO_VPS_SSH_PORT != '' && secrets.DO_VPS_SSH_PORT || '22' }}
+      DEPLOY_REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref != '' && inputs.ref || github.sha }}
+
+    steps:
+      - name: Validate required deploy secrets are present
+        run: |
+          set -euo pipefail
+          test -n "${VPS_HOST}"
+          test -n "${VPS_USER}"
+          test -n "${{ secrets.DO_VPS_SSH_PRIVATE_KEY }}"
+          test -n "${{ secrets.SPOTIFY_CLIENT_ID }}"
+          test -n "${{ secrets.SPOTIFY_CLIENT_SECRET }}"
+          test -n "${{ secrets.SPOTIFY_BACKEND_API_KEY }}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.DEPLOY_REF }}
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          install -d -m 0700 ~/.ssh
+          printf '%s\n' "${{ secrets.DO_VPS_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 0600 ~/.ssh/id_ed25519
+          ssh-keyscan -p "${VPS_PORT}" -H "${VPS_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Upload backend and deploy artifacts
+        run: |
+          set -euo pipefail
+          ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "rm -rf ~/spotify-auth-backend-release && mkdir -p ~/spotify-auth-backend-release"
+          scp -P "${VPS_PORT}" -r backend deploy "${VPS_USER}@${VPS_HOST}:~/spotify-auth-backend-release/"
+
+      - name: Deploy on VPS
+        env:
+          SPOTIFY_CLIENT_ID: ${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET: ${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          SPOTIFY_BACKEND_API_KEY: ${{ secrets.SPOTIFY_BACKEND_API_KEY }}
+        run: |
+          set -euo pipefail
+          SPOTIFY_CLIENT_ID_ESCAPED="$(printf '%q' "${SPOTIFY_CLIENT_ID}")"
+          SPOTIFY_CLIENT_SECRET_ESCAPED="$(printf '%q' "${SPOTIFY_CLIENT_SECRET}")"
+          SPOTIFY_BACKEND_API_KEY_ESCAPED="$(printf '%q' "${SPOTIFY_BACKEND_API_KEY}")"
+          ssh -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" \
+            "SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID_ESCAPED} SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET_ESCAPED} SPOTIFY_BACKEND_API_KEY=${SPOTIFY_BACKEND_API_KEY_ESCAPED} bash -s" <<'EOF'
+          set -euo pipefail
+
+          APP_ROOT="/opt/spotify-auth-backend"
+          RELEASE_ROOT="${HOME}/spotify-auth-backend-release"
+          SERVICE_NAME="spotify-auth-backend.service"
+          NGINX_AVAILABLE="/etc/nginx/sites-available/spotify-auth-backend.conf"
+          NGINX_ENABLED="/etc/nginx/sites-enabled/spotify-auth-backend.conf"
+
+          sudo install -d -m 0755 "${APP_ROOT}"
+          sudo rm -rf "${APP_ROOT}/backend" "${APP_ROOT}/deploy"
+          sudo cp -a "${RELEASE_ROOT}/backend" "${APP_ROOT}/backend"
+          sudo cp -a "${RELEASE_ROOT}/deploy" "${APP_ROOT}/deploy"
+
+          sudo bash "${APP_ROOT}/deploy/bootstrap-vps.sh"
+
+          sudo install -m 0644 "${APP_ROOT}/deploy/systemd/spotify-auth-backend.service" "/etc/systemd/system/${SERVICE_NAME}"
+          sudo install -m 0644 "${APP_ROOT}/deploy/nginx/spotify-auth-backend.conf" "${NGINX_AVAILABLE}"
+          sudo ln -sfn "${NGINX_AVAILABLE}" "${NGINX_ENABLED}"
+
+          sudo install -d -o root -g spotify-auth -m 0750 /etc/spotify-auth-backend
+          sudo bash -c "umask 027; cat > /etc/spotify-auth-backend/backend.env <<ENVVARS
+          SPOTIFY_CLIENT_ID=${SPOTIFY_CLIENT_ID}
+          SPOTIFY_CLIENT_SECRET=${SPOTIFY_CLIENT_SECRET}
+          SPOTIFY_BACKEND_API_KEY=${SPOTIFY_BACKEND_API_KEY}
+          ENVVARS"
+          sudo chmod 0640 /etc/spotify-auth-backend/backend.env
+          sudo chown root:spotify-auth /etc/spotify-auth-backend/backend.env
+
+          sudo /opt/spotify-auth-backend/.venv/bin/pip install --upgrade /opt/spotify-auth-backend/backend
+
+          sudo systemctl daemon-reload
+          sudo systemctl enable --now spotify-auth-backend.service
+
+          if command -v nginx >/dev/null 2>&1; then
+            sudo nginx -t
+            sudo systemctl reload nginx
+          fi
+          EOF

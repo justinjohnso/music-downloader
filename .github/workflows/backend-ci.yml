@@ -1,0 +1,50 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+  push:
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-ci.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backend-ci:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .
+          python -m pip install build httpx ruff
+
+      - name: Lint backend
+        run: ruff check app
+
+      - name: Build backend package
+        run: python -m build
+
+      - name: Backend smoke check
+        env:
+          SPOTIFY_BACKEND_API_KEY: ci-smoke-key
+        run: |
+          python -c "import os; from fastapi.testclient import TestClient; from app.main import app; client = TestClient(app); response = client.post('/spotify/resolve', json={'spotify_link': 'not-a-spotify-link'}, headers={'X-API-Key': os.environ['SPOTIFY_BACKEND_API_KEY']}); assert response.status_code == 400, response.text; payload = response.json(); assert payload.get('code') == 'invalid_spotify_link', payload"
