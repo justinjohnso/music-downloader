@@ -4,6 +4,7 @@ from typing import Optional, List, Dict
 from streamrip.client import DeezerClient
 from streamrip.config import Config
 from streamrip.db import Database, Dummy
+from streamrip.exceptions import AuthenticationError, MissingCredentialsError
 from streamrip.media import PendingTrack
 from streamrip.metadata import AlbumMetadata
 from streamrip.media.artwork import download_artwork
@@ -146,15 +147,24 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
     db = Database(downloads=Dummy(), failed=Dummy())
 
     try:
-        await client.login()
+        if verbose:
+            arl = config.session.deezer.arl
+            print(f"Deezer ARL: {arl[:8]}...{arl[-4:]}" if arl else "Deezer ARL: NOT SET")
+        try:
+            await client.login()
+        except MissingCredentialsError:
+            print("Error: No Deezer ARL found. Set 'arl' in the [deezer] section of mdl-config.toml.")
+            return
+        except AuthenticationError:
+            print("Error: Deezer ARL is invalid or expired. Update 'arl' in the [deezer] section of mdl-config.toml.")
+            return
         if not getattr(client, "logged_in", False):
-            print("Login failed. Check your Deezer credentials in the config file.")
+            print("Error: Deezer login failed. Check your credentials in mdl-config.toml.")
             return
         print("Logged in to Deezer.")
 
-        # Debug: check what download folder is actually being used
-        print(f"Actual download folder from config.file: {config.file.downloads.folder}")
-        print(f"Session download folder: {config.session.downloads.folder}")
+        if verbose:
+            print(f"Download folder: {config.session.downloads.folder}")
 
         successful_downloads = 0
         failed_downloads = 0
@@ -259,15 +269,21 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
     client = DeezerClient(config)
 
     try:
-        await client.login()
+        try:
+            await client.login()
+        except MissingCredentialsError:
+            print("Error: No Deezer ARL found. Set 'arl' in the [deezer] section of mdl-config.toml.")
+            return
+        except AuthenticationError:
+            print("Error: Deezer ARL is invalid or expired. Update 'arl' in the [deezer] section of mdl-config.toml.")
+            return
         if not getattr(client, "logged_in", False):
-            print("Login failed. Check your Deezer credentials in the config file.")
+            print("Error: Deezer login failed. Check your credentials in mdl-config.toml.")
             return
         print("Logged in to Deezer.")
 
-        # Debug: check what download folder is actually being used
-        print(f"Actual download folder from config.file: {config.file.downloads.folder}")
-        print(f"Session download folder: {config.session.downloads.folder}")
+        if verbose:
+            print(f"Download folder: {config.session.downloads.folder}")
 
         # Use the shared download function
         await download_track_with_client(client, config, search_string, verbose=verbose)
@@ -330,5 +346,10 @@ async def process_spotify_link(spotify_link: str, config_path: str = None, verbo
         playlist_name = info['name'] if info['is_playlist'] else None
         await download_multiple_tracks(tracks, config_path, verbose, info['is_playlist'], playlist_name)
 
+    except (AuthenticationError, MissingCredentialsError):
+        pass  # Already handled in download_multiple_tracks
     except Exception as e:
         print(f"Error processing Spotify link: {e}")
+        if verbose:
+            import traceback
+            traceback.print_exc()
