@@ -69,7 +69,6 @@ logs/
 # Local configuration
 mdl-config.toml
 .config/
-AGENTS.md
 
 # Jupyter Notebooks (if used for development/testing)
 .ipynb_checkpoints
