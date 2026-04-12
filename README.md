@@ -21,12 +21,17 @@ Download tracks from Deezer using search queries or Spotify links. Built on [str
    mdl --setup
    ```
 
+   The generated `mdl-config.toml` lives in the platform app-support location only:
+   - macOS: `~/Library/Application Support/music-downloader/mdl-config.toml`
+   - Linux: `~/.config/music-downloader/mdl-config.toml`
+   - Windows: `~/AppData/Roaming/music-downloader/mdl-config.toml`
+
 You're good to go.
 
 ## Usage
 
 ```bash
-# Search for a track
+# Search for a track (interactive candidate selection by default in TTY)
 mdl "TroyBoi - Dale"
 
 # Download a Spotify track
@@ -37,7 +42,21 @@ mdl "https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF"
 
 # Launch the GUI
 mdl --gui
+
+# Force first-result behavior (non-interactive)
+mdl --first-result "TroyBoi - Dale"
+
+# Adjust interactive candidate list size
+mdl --result-limit 15 "TroyBoi - Dale"
 ```
+
+### Interactive matching behavior
+
+- **CLI (default in TTY):** shows Deezer candidates and prompts you to pick the intended match.
+- **CLI `--first-result`:** skips prompts and downloads the first Deezer match.
+- **CLI Spotify playlists:** supported; in interactive mode you can select matches per track.
+- **GUI query + Spotify track links:** search first, then select and download one Deezer candidate.
+- **GUI Spotify playlists:** supported with an explicit confirmation for first-result matching.
 
 ## Spotify Resolution (Backend-First)
 
@@ -116,6 +135,7 @@ ARLs expire every 3-4 months. When yours stops working, grab a fresh one and run
 
 **Downloads failing or tracks not found**
 - Run with `--verbose` to see what's happening: `mdl --verbose "Artist - Track"`
+- Try interactive matching (default) to pick a better Deezer result instead of relying on first match.
 
 ## License
 
