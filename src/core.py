@@ -2,7 +2,7 @@ import os
 import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Callable
 from streamrip.client import DeezerClient
 from streamrip.config import Config
 from streamrip.db import Database, Dummy
@@ -12,6 +12,10 @@ from streamrip.metadata import AlbumMetadata
 from streamrip.media.artwork import download_artwork
 
 AUDIO_EXTENSIONS = {".mp3", ".flac", ".m4a", ".ogg", ".opus", ".aac", ".wav"}
+TrackCandidate = Dict[str, Any]
+SelectionCallback = Callable[
+    [str, List[TrackCandidate], Optional[Dict[str, str]]], Optional[int]
+]
 
 
 def _print_spotify_configuration_help() -> None:
@@ -87,11 +91,200 @@ async def managed_client(client, verbose: bool = False):
                     print(f"Error while closing client session: {e}")
 
 
+def _extract_track_results(results: Any) -> list[dict[str, Any]]:
+    """Normalize Deezer search response to a list of track dicts."""
+    if isinstance(results, list) and len(results) > 0:
+        first = results[0]
+        if isinstance(first, dict) and "data" in first:
+            return [track for track in first["data"] if isinstance(track, dict)]
+        return [item for item in results if isinstance(item, dict)]
+
+    if isinstance(results, dict):
+        if "data" in results:
+            return [track for track in results["data"] if isinstance(track, dict)]
+        return [results]
+
+    return []
+
+
+def _build_track_candidate(track: dict[str, Any]) -> TrackCandidate | None:
+    """Build a display/download candidate from a Deezer track payload."""
+    track_id = track.get("id")
+    title = track.get("title") or track.get("name") or "Unknown Title"
+    artist_data = track.get("artist") or track.get("artists")
+    album_data = track.get("album")
+
+    if isinstance(artist_data, dict):
+        artist = artist_data.get("name") or "Unknown Artist"
+    elif isinstance(artist_data, list) and len(artist_data) > 0 and isinstance(artist_data[0], dict):
+        artist = artist_data[0].get("name") or "Unknown Artist"
+    elif isinstance(artist_data, str):
+        artist = artist_data
+    else:
+        artist = "Unknown Artist"
+
+    album = (
+        album_data.get("title")
+        if isinstance(album_data, dict) and isinstance(album_data.get("title"), str)
+        else "Unknown Album"
+    )
+    album_id = album_data.get("id") if isinstance(album_data, dict) else None
+    duration = track.get("duration")
+    explicit = bool(track.get("explicit_lyrics", False))
+
+    if not track_id or not album_id:
+        return None
+
+    return {
+        "id": track_id,
+        "title": title,
+        "artist": artist,
+        "album": album,
+        "album_id": album_id,
+        "duration": duration,
+        "explicit": explicit,
+    }
+
+
+def format_track_candidate(candidate: TrackCandidate, index: int | None = None) -> str:
+    """Return a human-readable candidate label for CLI/GUI display."""
+    prefix = f"{index + 1}. " if index is not None else ""
+    duration = candidate.get("duration")
+    duration_text = ""
+    if isinstance(duration, int) and duration > 0:
+        mins, secs = divmod(duration, 60)
+        duration_text = f" [{mins}:{secs:02d}]"
+    explicit_text = " [E]" if candidate.get("explicit") else ""
+    return (
+        f"{prefix}{candidate.get('artist', 'Unknown Artist')} - "
+        f"{candidate.get('title', 'Unknown Title')} "
+        f"({candidate.get('album', 'Unknown Album')}){duration_text}{explicit_text}"
+    )
+
+
+async def search_track_candidates_with_client(
+    client, search_string: str, result_limit: int = 10
+) -> List[TrackCandidate]:
+    """Search Deezer and return normalized candidate tracks."""
+    try:
+        results = await client.search(query=search_string, media_type="track")
+        tracks = _extract_track_results(results)
+        
+        if not tracks:
+            print(f"No tracks found on Deezer for: {search_string}")
+            # Try a broader search if the original failed
+            if " - " in search_string:
+                broader = search_string.replace(" - ", " ")
+                print(f"Retrying with broader query: {broader}")
+                results = await client.search(query=broader, media_type="track")
+                tracks = _extract_track_results(results)
+
+        candidates: list[TrackCandidate] = []
+        for track in tracks:
+            candidate = _build_track_candidate(track)
+            if candidate is not None:
+                candidates.append(candidate)
+            if len(candidates) >= result_limit:
+                break
+        
+        print(f"Found {len(candidates)} candidates for: {search_string}")
+        return candidates
+    except Exception as e:
+        print(f"Error during Deezer search: {e}")
+        raise
+
+
+async def download_track_candidate_with_client(
+    client,
+    config,
+    candidate: TrackCandidate,
+    db=None,
+    verbose: bool = False,
+) -> Optional[str]:
+    """Download a single Deezer candidate track using an authenticated client."""
+    if db is None:
+        db = Database(downloads=Dummy(), failed=Dummy())
+
+    title = candidate.get("title", "Unknown Title")
+    artist = candidate.get("artist", "Unknown Artist")
+    track_id = candidate.get("id")
+    album_id = candidate.get("album_id")
+    if not track_id or not album_id:
+        print("Error: Selected track is missing required identifiers.")
+        return None
+
+    download_folder = config.file.downloads.folder
+    try:
+        album_data = await client.get_metadata(album_id, "album")
+        album = AlbumMetadata.from_album_resp(album_data, client.source)
+
+        if verbose:
+            print(f"Got album metadata: {album.album}")
+
+        artwork_folder = os.path.join(download_folder, ".artwork")
+        os.makedirs(artwork_folder, exist_ok=True)
+
+        cover_path, _ = await download_artwork(
+            client.session,
+            artwork_folder,
+            album.covers,
+            config.file.artwork,
+            for_playlist=False,
+        )
+
+        if verbose:
+            print("Downloaded album artwork")
+
+        pending = PendingTrack(
+            id=track_id,
+            album=album,
+            client=client,
+            config=config,
+            folder=download_folder,
+            db=db,
+            cover_path=cover_path,
+        )
+    except Exception as e:
+        print(f"Error preparing download: {e}")
+        return None
+
+    try:
+        print(f"Downloading '{title}' by {artist}...")
+        resolved = await pending.resolve()
+        await resolved.rip()
+        print(f"Successfully downloaded '{title}' by {artist}")
+
+        title_lower = title.lower() if title else ""
+        best_match = None
+        best_mtime = 0.0
+        for entry in os.scandir(download_folder):
+            if not entry.is_file():
+                continue
+            p = Path(entry.name)
+            if p.suffix.lower() not in AUDIO_EXTENSIONS:
+                continue
+            if title_lower and title_lower in entry.name.lower():
+                mtime = entry.stat().st_mtime
+                if mtime > best_mtime:
+                    best_mtime = mtime
+                    best_match = entry.path
+        return best_match if best_match else f"{title} by {artist}"
+    except Exception as e:
+        print(f"Error downloading track: {e}")
+        return None
+
+
 async def download_track_with_client(
-    client, config, search_string: str, db=None, verbose: bool = False
+    client,
+    config,
+    search_string: str,
+    db=None,
+    verbose: bool = False,
+    selection_index: int = 0,
+    result_limit: int = 10,
 ) -> Optional[str]:
     """
-    Search for a track on Deezer using the provided client and download the first result.
+    Search for Deezer tracks and download a selected result index.
 
     Args:
         client: An initialized DeezerClient
@@ -104,108 +297,27 @@ async def download_track_with_client(
         The file path if successful, None otherwise
     """
     try:
-        # Search for the track
         try:
-            results = await client.search(query=search_string, media_type="track")
+            candidates = await search_track_candidates_with_client(
+                client, search_string, result_limit
+            )
         except Exception as e:
             print(f"Error during search: {e}")
             return None
 
-        # Process search results
-        tracks = results
-        if isinstance(tracks, dict) and "data" in tracks:
-            tracks = tracks["data"]
-        if not tracks:
+        if not candidates:
             print(f"No tracks found for query: '{search_string}'")
             return None
 
-        track = tracks[0]
-        if isinstance(track, dict) and "data" in track:
-            track = track["data"][0]
-
-        # Extract track information
-        track_id = track.get("id")
-        title = track.get("title")
-        artist = None
-        if isinstance(track.get("artist"), dict):
-            artist = track["artist"].get("name")
-        elif isinstance(track.get("artist"), str):
-            artist = track["artist"]
-        print(f"Found track: {title} by {artist}")
-
-        if not track_id:
-            print("Error: Could not determine track ID.")
+        if selection_index < 0 or selection_index >= len(candidates):
+            print("Error: Selected result index is out of range.")
             return None
 
-        # Use provided database or create a new one
-        if db is None:
-            db = Database(downloads=Dummy(), failed=Dummy())
-        download_folder = config.file.downloads.folder
-
-        try:
-            # Get album metadata
-            album_id = track["album"]["id"]
-            album_data = await client.get_metadata(album_id, "album")
-            album = AlbumMetadata.from_album_resp(album_data, client.source)
-
-            if verbose:
-                print(f"Got album metadata: {album.album}")
-
-            # Download album artwork
-            artwork_folder = os.path.join(download_folder, ".artwork")
-            os.makedirs(artwork_folder, exist_ok=True)
-
-            cover_path, _ = await download_artwork(
-                client.session,
-                artwork_folder,
-                album.covers,
-                config.file.artwork,
-                for_playlist=False,
-            )
-
-            if verbose:
-                print("Downloaded album artwork")
-
-            # Create a PendingTrack with all required parameters
-            pending = PendingTrack(
-                id=track_id,
-                album=album,
-                client=client,
-                config=config,
-                folder=download_folder,
-                db=db,
-                cover_path=cover_path,
-            )
-        except Exception as e:
-            print(f"Error preparing download: {e}")
-            return None
-
-        try:
-            # Resolve and download the track
-            print(f"Downloading '{title}' by {artist}...")
-            resolved = await pending.resolve()
-            await resolved.rip()
-            print(f"Successfully downloaded '{title}' by {artist}")
-            # Find the actual downloaded file by scanning for the most recently
-            # modified file whose name contains the title (case-insensitive)
-            title_lower = title.lower() if title else ""
-            best_match = None
-            best_mtime = 0.0
-            for entry in os.scandir(download_folder):
-                if not entry.is_file():
-                    continue
-                p = Path(entry.name)
-                if p.suffix.lower() not in AUDIO_EXTENSIONS:
-                    continue
-                if title_lower and title_lower in entry.name.lower():
-                    mtime = entry.stat().st_mtime
-                    if mtime > best_mtime:
-                        best_mtime = mtime
-                        best_match = entry.path
-            return best_match if best_match else f"{title} by {artist}"
-        except Exception as e:
-            print(f"Error downloading track: {e}")
-            return None
+        selected = candidates[selection_index]
+        print(f"Selected: {selected.get('title')} by {selected.get('artist')}")
+        return await download_track_candidate_with_client(
+            client, config, selected, db=db, verbose=verbose
+        )
     except Exception as e:
         print(f"Error during track processing: {e}")
         return None
@@ -217,6 +329,9 @@ async def download_multiple_tracks(
     verbose: bool = False,
     is_playlist: bool = False,
     playlist_name: Optional[str] = None,
+    interactive: bool = False,
+    result_limit: int = 10,
+    selection_callback: Optional[SelectionCallback] = None,
 ) -> None:
     """
     Download multiple tracks from Deezer based on artist and title information.
@@ -227,6 +342,9 @@ async def download_multiple_tracks(
         verbose: Whether to print detailed output
         is_playlist: Whether this is from a Spotify playlist
         playlist_name: Name of the playlist if applicable
+        interactive: Whether to let the user choose Deezer matches per track
+        result_limit: Number of Deezer candidates to fetch per track
+        selection_callback: Called to select a candidate index per track
     """
     from src.config import (
         load_config,
@@ -289,10 +407,36 @@ async def download_multiple_tracks(
             search_string = f"{artist} {title}"
 
             print(f"\nProcessing track {i+1}/{total_tracks}: {artist} - {title}")
+            try:
+                candidates = await search_track_candidates_with_client(
+                    client, search_string, result_limit
+                )
+            except Exception as e:
+                print(f"Error during search: {e}")
+                failed_downloads += 1
+                continue
 
-            # Use the download function with shared client
-            result = await download_track_with_client(
-                client, config, search_string, db, verbose
+            if not candidates:
+                print(f"No tracks found for query: '{search_string}'")
+                failed_downloads += 1
+                continue
+
+            selection_index = 0
+            if interactive and selection_callback is not None:
+                selected = selection_callback(search_string, candidates, track)
+                if selected is None:
+                    print("Skipped.")
+                    failed_downloads += 1
+                    continue
+                selection_index = selected
+
+            if selection_index < 0 or selection_index >= len(candidates):
+                print("Error: Selected result index is out of range.")
+                failed_downloads += 1
+                continue
+
+            result = await download_track_candidate_with_client(
+                client, config, candidates[selection_index], db, verbose
             )
 
             if result:
@@ -332,10 +476,15 @@ async def download_multiple_tracks(
 
 
 async def download_track(
-    search_string: str, config_path: str = None, verbose: bool = False
+    search_string: str,
+    config_path: str = None,
+    verbose: bool = False,
+    interactive: bool = False,
+    result_limit: int = 10,
+    selection_callback: Optional[SelectionCallback] = None,
 ) -> None:
     """
-    Search for a track on Deezer using the provided search string and download the first result.
+    Search for Deezer tracks and download either a selected or first result.
 
     Args:
         search_string (str): The search query (artist and track name).
@@ -383,12 +532,116 @@ async def download_track(
         if verbose:
             print(f"Download folder: {config.session.downloads.folder}")
 
-        # Use the shared download function
-        await download_track_with_client(client, config, search_string, verbose=verbose)
+        try:
+            candidates = await search_track_candidates_with_client(
+                client, search_string, result_limit
+            )
+        except Exception as e:
+            print(f"Error during search: {e}")
+            return
+
+        if not candidates:
+            print(f"No tracks found for query: '{search_string}'")
+            return
+
+        selection_index = 0
+        if interactive and selection_callback is not None:
+            selected = selection_callback(search_string, candidates, None)
+            if selected is None:
+                print("Download cancelled.")
+                return
+            selection_index = selected
+
+        if selection_index < 0 or selection_index >= len(candidates):
+            print("Error: Selected result index is out of range.")
+            return
+
+        await download_track_candidate_with_client(
+            client, config, candidates[selection_index], verbose=verbose
+        )
+
+
+async def search_track_candidates(
+    search_string: str,
+    config_path: str = None,
+    verbose: bool = False,
+    result_limit: int = 10,
+) -> List[TrackCandidate]:
+    """Search Deezer and return candidate tracks without downloading."""
+    from src.config import (
+        load_config,
+        ensure_streamrip_config_exists,
+        merge_mdl_config_into_streamrip,
+    )
+
+    config_data = load_config()
+    config_path = config_path or ensure_streamrip_config_exists()
+    merge_mdl_config_into_streamrip(config_path, config_data)
+
+    if verbose:
+        print(f"Using config file: {config_path}")
+
+    config = Config(config_path)
+    client = DeezerClient(config)
+    async with managed_client(client, verbose):
+        try:
+            await client.login()
+        except MissingCredentialsError:
+            raise RuntimeError("No Deezer ARL configured. Run 'mdl --setup' to set one up.")
+        except AuthenticationError:
+            raise RuntimeError(
+                "Deezer ARL is invalid or expired (they last ~3-4 months). Get a new one:\nhttps://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\nThen run 'mdl --setup' to update it."
+            )
+        if not getattr(client, "logged_in", False):
+            raise RuntimeError("Deezer login failed. Check your ARL or run 'mdl --setup'.")
+        return await search_track_candidates_with_client(
+            client, search_string, result_limit
+        )
+
+
+async def download_track_candidate(
+    candidate: TrackCandidate, config_path: str = None, verbose: bool = False
+) -> Optional[str]:
+    """Download a previously selected Deezer candidate track."""
+    from src.config import (
+        load_config,
+        ensure_streamrip_config_exists,
+        merge_mdl_config_into_streamrip,
+    )
+
+    config_data = load_config()
+    config_path = config_path or ensure_streamrip_config_exists()
+    merge_mdl_config_into_streamrip(config_path, config_data)
+
+    if verbose:
+        print(f"Using config file: {config_path}")
+
+    config = Config(config_path)
+    client = DeezerClient(config)
+    db = Database(downloads=Dummy(), failed=Dummy())
+    async with managed_client(client, verbose):
+        try:
+            await client.login()
+        except MissingCredentialsError:
+            raise RuntimeError("No Deezer ARL configured. Run 'mdl --setup' to set one up.")
+        except AuthenticationError:
+            raise RuntimeError(
+                "Deezer ARL is invalid or expired (they last ~3-4 months). Get a new one:\nhttps://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\nThen run 'mdl --setup' to update it."
+            )
+        if not getattr(client, "logged_in", False):
+            raise RuntimeError("Deezer login failed. Check your ARL or run 'mdl --setup'.")
+        return await download_track_candidate_with_client(
+            client, config, candidate, db=db, verbose=verbose
+        )
 
 
 async def process_spotify_link(
-    spotify_link: str, config_path: str = None, verbose: bool = False
+    spotify_link: str,
+    config_path: str = None,
+    verbose: bool = False,
+    interactive: bool = False,
+    result_limit: int = 10,
+    selection_callback: Optional[SelectionCallback] = None,
 ) -> None:
     """
     Process a Spotify link to download tracks.
@@ -419,9 +672,28 @@ async def process_spotify_link(
 
         print(f"Found {len(normalized_tracks)} tracks")
 
-        # Download tracks
+        if not is_playlist and len(normalized_tracks) == 1:
+            track = normalized_tracks[0]
+            search_string = f"{track['artist']} {track['title']}"
+            await download_track(
+                search_string,
+                config_path,
+                verbose,
+                interactive=interactive,
+                result_limit=result_limit,
+                selection_callback=selection_callback,
+            )
+            return
+
         await download_multiple_tracks(
-            normalized_tracks, config_path, verbose, is_playlist, playlist_name
+            normalized_tracks,
+            config_path,
+            verbose,
+            is_playlist,
+            playlist_name,
+            interactive=interactive,
+            result_limit=result_limit,
+            selection_callback=selection_callback,
         )
 
     except (AuthenticationError, MissingCredentialsError):

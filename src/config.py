@@ -7,45 +7,32 @@ import tomlkit
 def load_config_with_path() -> tuple[dict, str | None]:
     """Load configuration from mdl-config.toml file, returning (data, path).
 
-    Searches for the config file in the following order:
+    Searches in:
     1. Current working directory
-    2. User's home directory
-    3. Platform-specific config directory
-
-    Returns:
-        A tuple of (parsed config dict, path string) or ({}, None) if not found.
+    2. User home directory
+    3. Platform-specific app-support config path
     """
     search_paths = [
-        Path.cwd() / "mdl-config.toml",
+        Path("mdl-config.toml"),
         Path.home() / "mdl-config.toml",
+        _get_mdl_config_path(),
     ]
-
-    # Add platform-specific config directory
-    if sys.platform == "darwin":  # macOS
-        search_paths.append(
-            Path.home() / "Library/Application Support/music-downloader/mdl-config.toml"
-        )
-    elif sys.platform == "win32":  # Windows
-        search_paths.append(
-            Path.home() / "AppData/Roaming/music-downloader/mdl-config.toml"
-        )
-    else:  # Linux and others
-        search_paths.append(Path.home() / ".config/music-downloader/mdl-config.toml")
 
     for config_path in search_paths:
         if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
-                return tomlkit.parse(f.read()), str(config_path)
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    return tomlkit.parse(f.read()), str(config_path)
+            except Exception as e:
+                print(f"Warning: Could not parse config at {config_path}: {e}")
+                continue
     return {}, None
 
 
 def load_config() -> dict:
     """Load configuration from mdl-config.toml file.
 
-    Searches for the config file in the following order:
-    1. Current working directory
-    2. User's home directory
-    3. Platform-specific config directory
+    Reads from the platform-specific app-support config path only.
     """
     data, _ = load_config_with_path()
     return data
@@ -204,6 +191,11 @@ def _get_mdl_config_dir() -> Path:
         return Path.home() / ".config/music-downloader"
 
 
+def _get_mdl_config_path() -> Path:
+    """Get the platform-specific mdl-config.toml path."""
+    return _get_mdl_config_dir() / "mdl-config.toml"
+
+
 def _validate_deezer_arl(arl: str) -> bool:
     """Attempt to validate a Deezer ARL by logging in."""
     import asyncio
@@ -339,8 +331,8 @@ def run_setup_wizard() -> None:
         arl, quality, folder, spotify_id, spotify_secret
     )
 
-    # Determine config path (platform-specific)
-    config_path = _get_mdl_config_dir() / "mdl-config.toml"
+    # Determine config path (platform-specific app-support directory)
+    config_path = _get_mdl_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
     with open(config_path, "w", encoding="utf-8") as f:
