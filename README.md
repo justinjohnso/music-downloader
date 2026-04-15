@@ -40,9 +40,6 @@ mdl "https://open.spotify.com/track/0aym2LBJBk9DAYuHHutrIl"
 # Download an entire Spotify playlist (generates an M3U file too)
 mdl "https://open.spotify.com/playlist/37i9dQZEVXbMDoHDwVN2tF"
 
-# Launch the GUI
-mdl --gui
-
 # Force first-result behavior (non-interactive)
 mdl --first-result "TroyBoi - Dale"
 
@@ -55,8 +52,6 @@ mdl --result-limit 15 "TroyBoi - Dale"
 - **CLI (default in TTY):** shows Deezer candidates and prompts you to pick the intended match.
 - **CLI `--first-result`:** skips prompts and downloads the first Deezer match.
 - **CLI Spotify playlists:** supported; in interactive mode you can select matches per track.
-- **GUI query + Spotify track links:** search first, then select and download one Deezer candidate.
-- **GUI Spotify playlists:** supported with an explicit confirmation for first-result matching.
 
 ## Spotify Resolution (Backend-First)
 

@@ -147,7 +147,7 @@ def _build_track_candidate(track: dict[str, Any]) -> TrackCandidate | None:
 
 
 def format_track_candidate(candidate: TrackCandidate, index: int | None = None) -> str:
-    """Return a human-readable candidate label for CLI/GUI display."""
+    """Return a human-readable candidate label for display."""
     prefix = f"{index + 1}. " if index is not None else ""
     duration = candidate.get("duration")
     duration_text = ""

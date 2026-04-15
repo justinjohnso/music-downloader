@@ -24,10 +24,8 @@ dependencies = [
     "spotipy",
     "tomlkit",
     "appdirs",
-    "PyQt6",
 ]
 
 [project.scripts]
 music-downloader = "src.downloader:main"
 mdl = "src.downloader:main"
-mdl-gui = "src.downloader:main_gui"
