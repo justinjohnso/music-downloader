@@ -30,6 +30,7 @@ def launch_gui():
     """Launch the GUI"""
     class DownloadThread(QThread):
         result_signal = pyqtSignal(str)
+        progress_signal = pyqtSignal(str)
 
         def __init__(self, query, verbose):
             super().__init__()
@@ -39,24 +40,44 @@ def launch_gui():
             self.loop = None
 
         def run(self):
+            old_stdout = sys.stdout
+            writer = SignalWriter(self.progress_signal)
+            sys.stdout = writer
+
             self.loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self.loop)
-            self.task = self.loop.create_task(run_download(self.query, self.verbose))
             try:
+                if is_spotify_link(self.query):
+                    coro = process_spotify_link(self.query, None, self.verbose)
+                else:
+                    coro = download_track(self.query, None, self.verbose)
+                self.task = self.loop.create_task(coro)
                 self.loop.run_until_complete(self.task)
-                result = self.task.result()
-                self.result_signal.emit(result)
+                self.result_signal.emit("Download complete.")
             except asyncio.CancelledError:
-                pass
+                self.result_signal.emit("Download cancelled.")
             except Exception as e:
                 self.result_signal.emit(f"Error: {str(e)}")
             finally:
+                sys.stdout = old_stdout
                 self.loop.close()
 
         def terminate(self):
             if self.loop and self.task and not self.task.done():
                 self.loop.call_soon_threadsafe(self.task.cancel)
                 self.loop.call_soon_threadsafe(self.loop.stop)
+
+    class SignalWriter:
+        """Replacement for sys.stdout that emits each printed line as a Qt signal."""
+        def __init__(self, signal):
+            self.signal = signal
+
+        def write(self, text):
+            if text.strip():
+                self.signal.emit(text.rstrip('\n'))
+
+        def flush(self):
+            pass
 
     app = QApplication(sys.argv)
 
@@ -151,6 +172,10 @@ def launch_gui():
     # Keep track of current thread
     current_thread = None
 
+    def on_progress(text):
+        result_text.append(text)
+        result_text.verticalScrollBar().setValue(result_text.verticalScrollBar().maximum())
+
     def download():
         nonlocal current_thread
         query = query_input.text().strip()
@@ -158,11 +183,12 @@ def launch_gui():
             QMessageBox.warning(window, 'Error', 'Please enter a query or Spotify link')
             return
         verbose = verbose_check.isChecked()
-        result_text.setText('Downloading...')
+        result_text.clear()
         if current_thread and current_thread.isRunning():
             current_thread.terminate()
         current_thread = DownloadThread(query, verbose)
-        current_thread.result_signal.connect(lambda r: (result_text.setText(r), result_text.verticalScrollBar().setValue(result_text.verticalScrollBar().maximum())))
+        current_thread.progress_signal.connect(on_progress)
+        current_thread.result_signal.connect(on_progress)
         current_thread.start()
 
     download_btn.clicked.connect(download)
