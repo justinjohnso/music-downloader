@@ -42,12 +42,10 @@ def main():
     parser = argparse.ArgumentParser(
         description="Download music tracks from Deezer using Streamrip.",
         epilog=(
-            "Spotify links use backend-first metadata resolution from mdl-config.toml:\n"
-            '  [backend] resolve_url = "https://.../spotify/resolve"\n'
-            '  [backend] api_key = "..."\n'
-            "If backend is unavailable, you can set local fallback credentials:\n"
+            "Spotify links require local credentials in mdl-config.toml:\n"
             '  [spotify] client_id = "..."\n'
-            '  [spotify] client_secret = "..."'
+            '  [spotify] client_secret = "..."\n'
+            "Get them from: https://developer.spotify.com/dashboard/"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )

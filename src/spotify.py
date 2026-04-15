@@ -42,15 +42,10 @@ def get_spotify_tracks(
     Returns:
         Tuple of (tracks list, info dict with 'is_playlist' and 'name')
     """
-    from src.config import (
-        get_backend_config,
-        load_config,
-    )  # Import here to avoid circular import
+    from src.config import load_config  # Import here to avoid circular import
 
     # Load configuration from mdl-config.toml file
     config_data = load_config()
-
-    backend_resolve_url, backend_api_key = get_backend_config(config_data)
 
     spotify_config = config_data.get("spotify", {})
     if not isinstance(spotify_config, dict):
@@ -69,47 +64,7 @@ def get_spotify_tracks(
     else:
         client_secret = client_secret.strip() or None
 
-    has_local_credentials = bool(client_id and client_secret)
-
-    backend_error: Exception | None = None
-    if backend_resolve_url and backend_api_key:
-        try:
-            payload = json.dumps({"spotify_link": spotify_link}).encode("utf-8")
-            backend_request = request.Request(
-                backend_resolve_url,
-                data=payload,
-                headers={
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                    "X-API-Key": backend_api_key,
-                },
-                method="POST",
-            )
-            with request.urlopen(backend_request, timeout=15) as response:
-                backend_response = json.loads(response.read().decode("utf-8"))
-
-            tracks = backend_response.get("tracks")
-            info = backend_response.get("info")
-            if isinstance(tracks, list) and isinstance(info, dict):
-                return tracks, info
-            raise ValueError("Backend returned an invalid Spotify resolve payload.")
-        except error.HTTPError as exc:
-            detail = str(exc.reason)
-            try:
-                body = exc.read().decode("utf-8")
-                error_payload = json.loads(body)
-                detail = error_payload.get("detail") or detail
-            except Exception:
-                pass
-            backend_error = RuntimeError(
-                f"Spotify backend request failed with HTTP {exc.code}: {detail}"
-            )
-        except (error.URLError, json.JSONDecodeError, ValueError, TimeoutError) as exc:
-            backend_error = RuntimeError(f"Spotify backend request failed: {exc}")
-        except Exception as exc:
-            backend_error = RuntimeError(f"Spotify backend request failed: {exc}")
-
-    if has_local_credentials:
+    if client_id and client_secret:
         sp = spotipy.Spotify(
             auth_manager=SpotifyClientCredentials(
                 client_id=client_id,
@@ -168,10 +123,7 @@ def get_spotify_tracks(
         else:
             raise ValueError(f"Unsupported Spotify link type: {spotify_type}")
 
-    if backend_error is not None:
-        raise backend_error
-
     raise ValueError(
-        "Spotify is not configured. Set [backend] resolve_url/api_key or provide "
-        "[spotify] client_id/client_secret."
+        "Spotify credentials not found in mdl-config.toml. "
+        "Please provide [spotify] client_id and client_secret."
     )

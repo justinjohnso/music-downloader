@@ -38,40 +38,6 @@ def load_config() -> dict:
     return data
 
 
-def get_backend_config(
-    config_data: dict | None = None,
-) -> tuple[str | None, str | None]:
-    """Get optional backend Spotify resolve settings from mdl-config.toml.
-
-    Args:
-        config_data: Optional parsed config data. If omitted, config is loaded.
-
-    Returns:
-        Tuple of (resolve_url, api_key). Missing/blank values are returned as None.
-    """
-    if config_data is None:
-        config_data = load_config()
-
-    backend = config_data.get("backend", {})
-    if not isinstance(backend, dict):
-        return None, None
-
-    resolve_url = backend.get("resolve_url")
-    api_key = backend.get("api_key")
-
-    if isinstance(resolve_url, str):
-        resolve_url = resolve_url.strip() or None
-    else:
-        resolve_url = None
-
-    if isinstance(api_key, str):
-        api_key = api_key.strip() or None
-    else:
-        api_key = None
-
-    return resolve_url, api_key
-
-
 def ensure_streamrip_config_exists() -> str:
     """Ensure the streamrip config file exists and return its path.
 
@@ -224,8 +190,6 @@ def _build_config_toml(
     folder: str,
     spotify_id: str = "",
     spotify_secret: str = "",
-    backend_resolve_url: str = "",
-    backend_api_key: str = "",
 ) -> str:
     """Build the mdl-config.toml content string."""
     lines = [
@@ -250,16 +214,6 @@ def _build_config_toml(
                 "[spotify]",
                 f'client_id = "{spotify_id}"',
                 f'client_secret = "{spotify_secret}"',
-            ]
-        )
-
-    if backend_resolve_url and backend_api_key:
-        lines.extend(
-            [
-                "",
-                "[backend]",
-                f'resolve_url = "{backend_resolve_url}"',
-                f'api_key = "{backend_api_key}"',
             ]
         )
 

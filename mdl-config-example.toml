@@ -21,16 +21,7 @@ folder = "~/Music/Music Downloader"
 track_format = "{artist} - {title}{explicit}"
 
 [spotify]
-# Optional: provide your own Spotify credentials as a fallback.
+# Optional: provide your own Spotify credentials.
 # Get them at: https://developer.spotify.com/dashboard/
 # client_id = ""
 # client_secret = ""
-
-[backend]
-# Optional: Backend endpoint used to resolve Spotify links (recommended).
-# Point this to your deployed backend `/spotify/resolve` endpoint.
-# resolve_url = "https://your-domain.example.com/spotify/resolve"
-#
-# Optional: Shared API key sent to the backend in request headers.
-# Treat this like a password: never commit real keys to git or public repos.
-# api_key = ""

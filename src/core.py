@@ -21,47 +21,11 @@ SelectionCallback = Callable[
 def _print_spotify_configuration_help() -> None:
     """Print guidance for configuring Spotify metadata resolution."""
     print(
-        "Spotify metadata lookup requires one of the following in mdl-config.toml:\n"
-        "  [backend] resolve_url + api_key (recommended)\n"
-        "  [spotify] client_id + client_secret (local fallback)"
+        "Spotify metadata lookup requires local credentials in mdl-config.toml:\n"
+        "  [spotify] client_id = \"...\"\n"
+        "  [spotify] client_secret = \"...\"\n"
+        "Get them from: https://developer.spotify.com/dashboard/"
     )
-
-
-def _normalize_spotify_payload(
-    tracks: list[dict[str, Any]], info: dict[str, Any], verbose: bool
-) -> tuple[list[dict[str, str]], bool, str | None]:
-    """Normalize Spotify payload returned from backend/local resolver."""
-    normalized_tracks: list[dict[str, str]] = []
-    for index, track in enumerate(tracks):
-        if not isinstance(track, dict):
-            if verbose:
-                print(f"Skipping Spotify track {index + 1}: expected object payload.")
-            continue
-
-        artist = track.get("artist")
-        title = track.get("title")
-        if not isinstance(artist, str) or not isinstance(title, str):
-            if verbose:
-                print(
-                    f"Skipping Spotify track {index + 1}: missing string artist/title."
-                )
-            continue
-
-        artist = artist.strip()
-        title = title.strip()
-        if not artist or not title:
-            if verbose:
-                print(f"Skipping Spotify track {index + 1}: empty artist/title values.")
-            continue
-
-        normalized_tracks.append({"artist": artist, "title": title})
-
-    is_playlist = bool(info.get("is_playlist")) if isinstance(info, dict) else False
-    playlist_name = info.get("name") if isinstance(info, dict) else None
-    if not isinstance(playlist_name, str):
-        playlist_name = None
-
-    return normalized_tracks, is_playlist, playlist_name
 
 
 @asynccontextmanager
@@ -662,18 +626,17 @@ async def process_spotify_link(
             None, get_spotify_tracks, spotify_link
         )
 
-        normalized_tracks, is_playlist, playlist_name = _normalize_spotify_payload(
-            tracks, info, verbose
-        )
-
-        if not normalized_tracks:
+        if not tracks:
             print("No tracks found in the Spotify link.")
             return
 
-        print(f"Found {len(normalized_tracks)} tracks")
+        is_playlist = bool(info.get("is_playlist"))
+        playlist_name = info.get("name")
 
-        if not is_playlist and len(normalized_tracks) == 1:
-            track = normalized_tracks[0]
+        print(f"Found {len(tracks)} tracks")
+
+        if not is_playlist and len(tracks) == 1:
+            track = tracks[0]
             search_string = f"{track['artist']} {track['title']}"
             await download_track(
                 search_string,
@@ -686,7 +649,7 @@ async def process_spotify_link(
             return
 
         await download_multiple_tracks(
-            normalized_tracks,
+            tracks,
             config_path,
             verbose,
             is_playlist,
@@ -700,9 +663,7 @@ async def process_spotify_link(
         pass  # Already handled in download_multiple_tracks
     except Exception as e:
         print(f"Error processing Spotify link: {e}")
-        if "Spotify backend request failed" in str(
-            e
-        ) or "Spotify is not configured" in str(e):
+        if "Spotify credentials not found" in str(e):
             _print_spotify_configuration_help()
         if verbose:
             import traceback
