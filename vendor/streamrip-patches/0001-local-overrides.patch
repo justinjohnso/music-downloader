@@ -1,0 +1,434 @@
+diff --git a/streamrip/client/__init__.py b/streamrip/client/__init__.py
+index 4e5dd8c..8fa610b 100644
+--- a/streamrip/client/__init__.py
++++ b/streamrip/client/__init__.py
+@@ -6,11 +6,11 @@ from .soundcloud import SoundcloudClient
+ from .tidal import TidalClient
+ 
+ __all__ = [
++    "BasicDownloadable",
+     "Client",
+     "DeezerClient",
+-    "TidalClient",
++    "Downloadable",
+     "QobuzClient",
+     "SoundcloudClient",
+-    "Downloadable",
+-    "BasicDownloadable",
++    "TidalClient",
+ ]
+diff --git a/streamrip/client/deezer.py b/streamrip/client/deezer.py
+index 056463f..2f64bfe 100644
+--- a/streamrip/client/deezer.py
++++ b/streamrip/client/deezer.py
+@@ -161,7 +161,7 @@ class DeezerClient(Client):
+             int(track_info.get(f"FILESIZE_{format}", 0)) for _, format in quality_map
+         ]
+         dl_info["quality_to_size"] = size_map
+-        
++
+         # Check if requested quality is available
+         if size_map[quality] == 0:
+             if self.config.lower_quality_if_not_available:
+@@ -178,7 +178,7 @@ class DeezerClient(Client):
+                 raise NonStreamableError(
+                     f"The requested quality {quality} is not available and fallback is disabled."
+                 )
+-        
++
+         # Update the quality in dl_info to reflect the final quality used
+         dl_info["quality"] = quality
+ 
+diff --git a/streamrip/client/downloadable.py b/streamrip/client/downloadable.py
+index 3b29b50..cbbdfe5 100644
+--- a/streamrip/client/downloadable.py
++++ b/streamrip/client/downloadable.py
+@@ -47,8 +47,8 @@ async def fast_async_download(path, url, headers, callback):
+     chunk_size: int = 2**17  # 131 KB
+     counter = 0
+     yield_every = 8  # 1 MB
+-    with open(path, "wb") as file:  # noqa: ASYNC101
+-        with requests.get(  # noqa: ASYNC100
++    with open(path, "wb") as file:
++        with requests.get(
+             url,
+             headers=headers,
+             allow_redirects=True,
+@@ -396,7 +396,7 @@ async def concat_audio_files(paths: list[str], out: str, ext: str, max_files_ope
+     outpaths = [
+         os.path.join(
+             tempdir,
+-            f"__streamrip_ffmpeg_{hash(paths[i*max_files_open])}.{ext}",
++            f"__streamrip_ffmpeg_{hash(paths[i * max_files_open])}.{ext}",
+         )
+         for i in range(num_batches)
+     ]
+diff --git a/streamrip/db.py b/streamrip/db.py
+index 94085e1..12fda3a 100644
+--- a/streamrip/db.py
++++ b/streamrip/db.py
+@@ -95,9 +95,9 @@ class DatabaseBase(DatabaseInterface):
+         :rtype: bool
+         """
+         allowed_keys = set(self.structure.keys())
+-        assert all(
+-            key in allowed_keys for key in items.keys()
+-        ), f"Invalid key. Valid keys: {allowed_keys}"
++        assert all(key in allowed_keys for key in items.keys()), (
++            f"Invalid key. Valid keys: {allowed_keys}"
++        )
+ 
+         items = {k: str(v) for k, v in items.items()}
+ 
+diff --git a/streamrip/media/__init__.py b/streamrip/media/__init__.py
+index 4c478f7..d587c2e 100644
+--- a/streamrip/media/__init__.py
++++ b/streamrip/media/__init__.py
+@@ -12,20 +12,20 @@ from .playlist import (
+ from .track import PendingSingle, PendingTrack, Track
+ 
+ __all__ = [
++    "Album",
++    "Artist",
++    "Label",
+     "Media",
+     "Pending",
+-    "Album",
+     "PendingAlbum",
+-    "Artist",
+     "PendingArtist",
+-    "Label",
+     "PendingLabel",
+-    "Playlist",
+-    "PendingPlaylist",
+     "PendingLastfmPlaylist",
+-    "Track",
+-    "PendingTrack",
++    "PendingPlaylist",
+     "PendingPlaylistTrack",
+     "PendingSingle",
++    "PendingTrack",
++    "Playlist",
++    "Track",
+     "remove_artwork_tempdirs",
+ ]
+diff --git a/streamrip/media/playlist.py b/streamrip/media/playlist.py
+index 383f246..f26bc1c 100644
+--- a/streamrip/media/playlist.py
++++ b/streamrip/media/playlist.py
+@@ -248,7 +248,7 @@ class PendingLastfmPlaylist(Pending):
+         pending_tracks = []
+         for pos, (id, from_fallback) in enumerate(results, start=1):
+             if id is None:
+-                logger.warning(f"No results found for {titles_artists[pos-1]}")
++                logger.warning(f"No results found for {titles_artists[pos - 1]}")
+                 continue
+ 
+             if from_fallback:
+diff --git a/streamrip/media/semaphore.py b/streamrip/media/semaphore.py
+index c71ea89..3916d31 100644
+--- a/streamrip/media/semaphore.py
++++ b/streamrip/media/semaphore.py
+@@ -33,8 +33,8 @@ def global_download_semaphore(c: DownloadsConfig) -> asyncio.Semaphore | nullcon
+     if _global_semaphore is None:
+         _global_semaphore = (max_connections, asyncio.Semaphore(max_connections))
+ 
+-    assert (
+-        max_connections == _global_semaphore[0]
+-    ), f"Already have other global semaphore {_global_semaphore}"
++    assert max_connections == _global_semaphore[0], (
++        f"Already have other global semaphore {_global_semaphore}"
++    )
+ 
+     return _global_semaphore[1]
+diff --git a/streamrip/metadata/__init__.py b/streamrip/metadata/__init__.py
+index 88f4d77..7924ddf 100644
+--- a/streamrip/metadata/__init__.py
++++ b/streamrip/metadata/__init__.py
+@@ -19,21 +19,21 @@ from .tagger import tag_file
+ from .track import TrackInfo, TrackMetadata
+ 
+ __all__ = [
+-    "AlbumMetadata",
+-    "ArtistMetadata",
+     "AlbumInfo",
+-    "TrackInfo",
+-    "LabelMetadata",
+-    "TrackMetadata",
+-    "PlaylistMetadata",
+-    "Covers",
+-    "tag_file",
+-    "util",
++    "AlbumMetadata",
+     "AlbumSummary",
++    "ArtistMetadata",
+     "ArtistSummary",
++    "Covers",
++    "LabelMetadata",
+     "LabelSummary",
++    "PlaylistMetadata",
+     "PlaylistSummary",
++    "SearchResults",
+     "Summary",
++    "TrackInfo",
++    "TrackMetadata",
+     "TrackSummary",
+-    "SearchResults",
++    "tag_file",
++    "util",
+ ]
+diff --git a/streamrip/metadata/playlist.py b/streamrip/metadata/playlist.py
+index 58a563c..b5399b4 100644
+--- a/streamrip/metadata/playlist.py
++++ b/streamrip/metadata/playlist.py
+@@ -57,7 +57,9 @@ class PlaylistMetadata:
+                 track,
+             )
+             if meta is None:
+-                logger.error(f"Track {i+1} in playlist {name} not available for stream")
++                logger.error(
++                    f"Track {i + 1} in playlist {name} not available for stream"
++                )
+                 continue
+             tracks.append(meta)
+ 
+diff --git a/streamrip/metadata/search_results.py b/streamrip/metadata/search_results.py
+index 4b3011b..f618f19 100644
+--- a/streamrip/metadata/search_results.py
++++ b/streamrip/metadata/search_results.py
+@@ -268,7 +268,7 @@ class SearchResults:
+         return cls(results)
+ 
+     def summaries(self) -> list[str]:
+-        return [f"{i+1}. {r.summarize()}" for i, r in enumerate(self.results)]
++        return [f"{i + 1}. {r.summarize()}" for i, r in enumerate(self.results)]
+ 
+     def get_choices(self, inds: tuple[int, ...] | int):
+         if isinstance(inds, int):
+diff --git a/streamrip/rip/cli.py b/streamrip/rip/cli.py
+index 2b3f532..7b445de 100644
+--- a/streamrip/rip/cli.py
++++ b/streamrip/rip/cli.py
+@@ -247,7 +247,7 @@ async def file(ctx, path):
+                     s = set(items)
+                     if len(s) < len(items):
+                         console.print(
+-                            f"Found [orange]{len(items)-len(s)}[/orange] repeated URLs!"
++                            f"Found [orange]{len(items) - len(s)}[/orange] repeated URLs!"
+                         )
+                         items = list(s)
+                     console.print(
+diff --git a/streamrip/rip/main.py b/streamrip/rip/main.py
+index 562773f..fd21aa9 100644
+--- a/streamrip/rip/main.py
++++ b/streamrip/rip/main.py
+@@ -221,7 +221,7 @@ class Main:
+                     "SPACE - select, ENTER - download, ESC - exit"
+                 ),
+                 cycle_cursor=True,
+-                clear_screen=True,
++                clear_screen=False,
+                 multi_select=True,
+             )
+             chosen_ind = menu.show()
+diff --git a/tests/test_deezer.py b/tests/test_deezer.py
+index 5b7b7d7..1852116 100644
+--- a/tests/test_deezer.py
++++ b/tests/test_deezer.py
+@@ -1,13 +1,14 @@
+ import os
+-import pytest
+ from unittest.mock import Mock, patch
++
++import pytest
+ from util import arun
+ 
+-from streamrip.client.downloadable import DeezerDownloadable
+ from streamrip.client.deezer import DeezerClient
+ from streamrip.config import Config
+ from streamrip.exceptions import NonStreamableError
+ 
++
+ @pytest.fixture(scope="session")
+ def deezer_client():
+     """Integration test fixture - requires DEEZER_ARL environment variable"""
+@@ -17,11 +18,12 @@ def deezer_client():
+     config.session.deezer.lower_quality_if_not_available = True
+     client = DeezerClient(config)
+     arun(client.login())
+-    
++
+     yield client
+-    
++
+     arun(client.session.close())
+ 
++
+ @pytest.fixture
+ def mock_deezer_client():
+     """Unit test fixture - mocked client for fast testing"""
+@@ -29,103 +31,113 @@ def mock_deezer_client():
+     config.session.deezer.arl = "test_arl"
+     config.session.deezer.quality = 2
+     config.session.deezer.lower_quality_if_not_available = True
+-    
++
+     client = DeezerClient(config)
+     client.client = Mock()
+     client.client.gw = Mock()
+     client.session = Mock()
+-    
++
+     return client
+ 
++
+ # ===== UNIT TESTS =====
+ 
++
+ def test_deezer_fallback_logic_with_mock_data(mock_deezer_client):
+     """Unit test: fallback logic works with mocked track data"""
+     # Mock track info where FLAC is unavailable but MP3_320 is available
+     # quality_map: [(9, "MP3_128"), (3, "MP3_320"), (1, "FLAC")]
+     # So FILESIZE_MP3_128 = quality 0, FILESIZE_MP3_320 = quality 1, FILESIZE_FLAC = quality 2
+     mock_track_info = {
+-        "FILESIZE_FLAC": 0,      # FLAC unavailable (quality 2)
+-        "FILESIZE_MP3_320": 5000000, # MP3_320 available (quality 1)
+-        "FILESIZE_MP3_128": 2000000, # MP3_128 available (quality 0)
+-        "TRACK_TOKEN": "test_token"
++        "FILESIZE_FLAC": 0,  # FLAC unavailable (quality 2)
++        "FILESIZE_MP3_320": 5000000,  # MP3_320 available (quality 1)
++        "FILESIZE_MP3_128": 2000000,  # MP3_128 available (quality 0)
++        "TRACK_TOKEN": "test_token",
+     }
+-    
++
+     # Mock the client methods
+     mock_deezer_client.client.gw.get_track.return_value = mock_track_info
+     mock_deezer_client.client.get_track_url.return_value = "https://test.mp3"
+-    
++
+     # Test fallback behavior
+-    with patch.object(mock_deezer_client, 'get_session'):
++    with patch.object(mock_deezer_client, "get_session"):
+         downloadable = arun(mock_deezer_client.get_downloadable("123", quality=2))
+-        
++
+         # Should have fallen back to quality 1 (MP3_320) since FLAC is unavailable
+         assert downloadable.quality == 1
+ 
++
+ def test_deezer_no_fallback_when_quality_available(mock_deezer_client):
+     """Unit test: no fallback when requested quality is available"""
+     # Mock track info where FLAC is available
+     # quality_map: [(9, "MP3_128"), (3, "MP3_320"), (1, "FLAC")]
+     mock_track_info = {
+-        "FILESIZE_FLAC": 25000000, # FLAC available (quality 2)
++        "FILESIZE_FLAC": 25000000,  # FLAC available (quality 2)
+         "FILESIZE_MP3_320": 5000000,  # MP3_320 available (quality 1)
+         "FILESIZE_MP3_128": 2000000,  # MP3_128 available (quality 0)
+-        "TRACK_TOKEN": "test_token"
++        "TRACK_TOKEN": "test_token",
+     }
+-    
++
+     mock_deezer_client.client.gw.get_track.return_value = mock_track_info
+     mock_deezer_client.client.get_track_url.return_value = "https://test.flac"
+-    
+-    with patch.object(mock_deezer_client, 'get_session'):
++
++    with patch.object(mock_deezer_client, "get_session"):
+         downloadable = arun(mock_deezer_client.get_downloadable("123", quality=2))
+-        
++
+         # Should use requested quality 2 (FLAC)
+         assert downloadable.quality == 2
+ 
++
+ def test_deezer_fallback_to_lowest_available_quality(mock_deezer_client):
+     """Unit test: fallback walks down quality list until finding available quality"""
+     # Mock track info where only MP3_128 is available
+     # quality_map: [(9, "MP3_128"), (3, "MP3_320"), (1, "FLAC")]
+     mock_track_info = {
+-        "FILESIZE_FLAC": 0,      # FLAC unavailable (quality 2)
+-        "FILESIZE_MP3_320": 0,      # MP3_320 unavailable (quality 1)
+-        "FILESIZE_MP3_128": 2000000, # MP3_128 available (quality 0)
+-        "TRACK_TOKEN": "test_token"
++        "FILESIZE_FLAC": 0,  # FLAC unavailable (quality 2)
++        "FILESIZE_MP3_320": 0,  # MP3_320 unavailable (quality 1)
++        "FILESIZE_MP3_128": 2000000,  # MP3_128 available (quality 0)
++        "TRACK_TOKEN": "test_token",
+     }
+-    
++
+     mock_deezer_client.client.gw.get_track.return_value = mock_track_info
+     mock_deezer_client.client.get_track_url.return_value = "https://test.mp3"
+-    
+-    with patch.object(mock_deezer_client, 'get_session'):
++
++    with patch.object(mock_deezer_client, "get_session"):
+         downloadable = arun(mock_deezer_client.get_downloadable("123", quality=2))
+-        
++
+         # Should have fallen back to quality 0 (MP3_128) since higher qualities unavailable
+         assert downloadable.quality == 0
+ 
++
+ def test_deezer_no_fallback_when_disabled(mock_deezer_client):
+     """Unit test: no fallback when lower_quality_if_not_available is False"""
+     # Disable fallback
+     mock_deezer_client.config.lower_quality_if_not_available = False
+-    
++
+     # Mock track info where FLAC is unavailable
+     # quality_map: [(9, "MP3_128"), (3, "MP3_320"), (1, "FLAC")]
+     mock_track_info = {
+-        "FILESIZE_FLAC": 0,      # FLAC unavailable (quality 2)
+-        "FILESIZE_MP3_320": 5000000, # MP3_320 available (quality 1)
+-        "FILESIZE_MP3_128": 2000000, # MP3_128 available (quality 0)
+-        "TRACK_TOKEN": "test_url"
++        "FILESIZE_FLAC": 0,  # FLAC unavailable (quality 2)
++        "FILESIZE_MP3_320": 5000000,  # MP3_320 available (quality 1)
++        "FILESIZE_MP3_128": 2000000,  # MP3_128 available (quality 0)
++        "TRACK_TOKEN": "test_url",
+     }
+-    
++
+     mock_deezer_client.client.gw.get_track.return_value = mock_track_info
+     mock_deezer_client.client.get_track_url.return_value = "https://test.mp3"
+-    
++
+     # Should raise an error when requested quality is unavailable and fallback is disabled
+-    with patch.object(mock_deezer_client, 'get_session'):
+-        with pytest.raises(NonStreamableError, match="The requested quality 2 is not available and fallback is disabled"):
++    with patch.object(mock_deezer_client, "get_session"):
++        with pytest.raises(
++            NonStreamableError,
++            match="The requested quality 2 is not available and fallback is disabled",
++        ):
+             arun(mock_deezer_client.get_downloadable("123", quality=2))
+ 
++
+ # ===== INTEGRATION TEST =====
+ 
++
+ @pytest.mark.skipif(
+     "DEEZER_ARL" not in os.environ, reason="Deezer ARL not found in env."
+ )
+@@ -133,12 +145,14 @@ def test_deezer_fallback_actually_occurred(deezer_client):
+     """Integration test: verify fallback works with real track 77874822"""
+     # We know track 77874822 doesn't have FLAC available, so test fallback scenario
+     downloadable = arun(deezer_client.get_downloadable("77874822", quality=2))
+-    
++
+     # Since we requested FLAC (quality=2) but it's not available,
+     # we should have fallen back to the next available quality (1 = MP3_320)
+-    assert downloadable.quality == 1, "Should have fallen back to MP3_320 when FLAC unavailable"
++    assert downloadable.quality == 1, (
++        "Should have fallen back to MP3_320 when FLAC unavailable"
++    )
+     print("Fallback occurred: FLAC unavailable, fell back to MP3_320")
+-    
++
+     # Verify the URL is actually accessible and working
+     assert downloadable.url.startswith("https://")
+     assert downloadable._size > 0, "Downloadable should have a valid file size"
