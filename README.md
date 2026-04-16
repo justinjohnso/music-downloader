@@ -20,7 +20,7 @@ A Python CLI and GUI tool for downloading high-quality music tracks from Deezer 
 
 1. **Create Spotify Dev App** (if you're not using default creds):
    
-   This is where you'll get your client ID & secret for the MDL setup.
+   This is where you'll get your client ID & secret for the MDL setup. Use `http://127.0.0.1:8888/callback` as the redirect URI.
    - Info: https://developer.spotify.com/documentation/web-api/concepts/apps
    - Link: https://developer.spotify.com/
 
