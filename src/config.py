@@ -413,7 +413,7 @@ def run_setup_wizard() -> None:
 
         # 1. Deezer ARL
         console.print("\n[bold]Step 1: Deezer ARL[/bold] [red](required)[/red]")
-        console.print("[dim]Your ARL is a cookie used to authenticate with Deezer.[/dim]")
+        console.print("[dim]Your ARL is a cookie used to authenticate with Deezer. You need to create a Deezer account and login for this.[/dim]")
         console.print("[dim]Find it here:[/dim] [link=https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie]streamrip wiki[/link]\n")
         
         arl = ""
@@ -449,8 +449,8 @@ def run_setup_wizard() -> None:
         quality = int(quality_str)
 
         # 4. Spotify
-        console.print("\n[bold]Step 4: Spotify Credentials[/bold] [dim](optional)[/dim]")
-        console.print("[dim]MDL has built-in defaults, but you can provide your own.[/dim]")
+        console.print("\n[bold]Step 4: Spotify Dev App Credentials[/bold] [dim](optional)[/dim]")
+        console.print("[dim]MDL has built-in defaults, but you can provide your own via https://developer.spotify.com/ .[/dim]")
         
         spotify_id = default_spotify_id
         spotify_secret = default_spotify_secret
