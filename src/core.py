@@ -136,19 +136,22 @@ async def download_multiple_tracks(
         playlist_name: Name of the playlist if applicable
     """
     from src.config import (
-        load_config,
+        load_config_with_path,
         ensure_streamrip_config_exists,
         apply_config_overrides,
     )
 
     # Load configuration from mdl-config.toml
-    config_data = load_config()
+    config_data, mdl_config_path = load_config_with_path()
+
+    if verbose and mdl_config_path:
+        print(f"Using mdl config: {mdl_config_path}")
 
     # Use provided config path or ensure default exists
     config_path = config_path or ensure_streamrip_config_exists()
 
     if verbose:
-        print(f"Using config file: {config_path}")
+        print(f"Using streamrip config: {config_path}")
 
     # Load configuration and initialize client (only once for all tracks)
     config = Config(config_path)
@@ -266,19 +269,22 @@ async def download_track(
         verbose (bool): Whether to print detailed output.
     """
     from src.config import (
-        load_config,
+        load_config_with_path,
         ensure_streamrip_config_exists,
         apply_config_overrides,
     )
 
     # Load configuration from mdl-config.toml
-    config_data = load_config()
+    config_data, mdl_config_path = load_config_with_path()
+
+    if verbose and mdl_config_path:
+        print(f"Using mdl config: {mdl_config_path}")
 
     # Use provided config path or ensure default exists
     config_path = config_path or ensure_streamrip_config_exists()
 
     if verbose:
-        print(f"Using config file: {config_path}")
+        print(f"Using streamrip config: {config_path}")
 
     # Load configuration and initialize client
     config = Config(config_path)
