@@ -4,19 +4,27 @@ A Python CLI and GUI tool for downloading high-quality music tracks from Deezer 
 
 ## Quick Start
 
-1. **Install pipx** (if you don't have it):
+1. **Install pipx, python3.14 & jpeg-turbo** (if you don't have them):
    ```bash
    brew install pipx
+   brew install python@3.14
+   brew install jpeg-turbo pkgconf
    ```
 
-2. **Clone and install**:
+1. **Clone and install**:
    ```bash
    git clone --recursive https://github.com/justinjohnso/music-downloader.git
    cd music-downloader
    pipx install .
    ```
 
-3. **Run the setup wizard** — it will walk you through Deezer login, download folder, and quality settings:
+1. **Create Spotify Dev App** (if you're not using default creds):
+   
+   This is where you'll get your client ID & secret for the MDL setup.
+   - Info: https://developer.spotify.com/documentation/web-api/concepts/apps
+   - Link: https://developer.spotify.com/
+
+1. **Run the setup wizard** — it will walk you through Deezer login, download folder, and quality settings:
    ```bash
    mdl --setup
    ```
@@ -73,7 +81,7 @@ To download from Deezer, you need an ARL cookie from your account. The setup wiz
 - Your Deezer ARL has likely expired. Get a new one from the browser and update your config via `mdl --setup`.
 
 **"Spotify API credentials not found"**
-- Ensure you have correctly set the `client_id` and `client_secret` in your `mdl-config.toml`.
+- Ensure you have correctly set the `client_id` and `client_secret` in your `mdl-config.toml` from your Spotify Developer Application (https://developer.spotify.com/).
 
 ## License
 
