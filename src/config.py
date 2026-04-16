@@ -220,7 +220,21 @@ def _apply_to_session(session, config_data: dict) -> None:
     if "deezer" in config_data:
         deezer = config_data["deezer"]
         if deezer.get("arl") is not None: session.deezer.arl = deezer["arl"]
-        if deezer.get("quality") is not None: session.deezer.quality = deezer["quality"]
+        if deezer.get("quality") is not None:
+            mdl_quality = int(deezer["quality"])
+            # MDL quality choices:
+            # 1 = 320kbps MP3
+            # 2 = FLAC
+            #
+            # Streamrip/Deezer uses its own internal quality enum.
+            # Map MDL values explicitly instead of passing them through directly.
+            if mdl_quality == 1:
+                session.deezer.quality = 0
+            elif mdl_quality == 2:
+                session.deezer.quality = 2
+            else:
+                session.deezer.quality = 0
+
         if deezer.get("use_deezloader") is not None: session.deezer.use_deezloader = deezer["use_deezloader"]
         if deezer.get("deezloader_warnings") is not None: session.deezer.deezloader_warnings = deezer["deezloader_warnings"]
 
