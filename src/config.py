@@ -45,25 +45,41 @@ streamrip.config.ConfigData.from_toml = _patched_from_toml
 def load_config_with_path() -> tuple[dict, str | None]:
     """Load configuration from mdl-config.toml file, returning (data, path).
 
-    Searches in:
-    1. Current working directory
-    2. User home directory
-    3. Platform-specific app-support config path
+    Searches in (order of preference):
+    1. Platform-specific app-support config path (Modern)
+    2. User home directory (Legacy)
+    3. Current working directory (Legacy)
     """
-    search_paths = [
-        Path("mdl-config.toml"),
+    modern_path = _get_mdl_config_path()
+    legacy_paths = [
         Path.home() / "mdl-config.toml",
-        _get_mdl_config_path(),
+        Path("mdl-config.toml"),
     ]
 
-    for config_path in search_paths:
+    # If modern config exists, use it
+    if modern_path.exists():
+        # Check if any legacy configs are also present to warn the user
+        for lp in legacy_paths:
+            if lp.exists():
+                print(f"Note: Using modern config at {modern_path}. Legacy config at {lp} is being ignored.")
+        
+        try:
+            with open(modern_path, "r", encoding="utf-8") as f:
+                return tomlkit.parse(f.read()), str(modern_path)
+        except Exception as e:
+            print(f"Warning: Could not parse modern config at {modern_path}: {e}")
+
+    # Fallback to legacy paths
+    for config_path in legacy_paths:
         if config_path.exists():
+            print(f"Note: Using legacy config found at {config_path}.")
             try:
                 with open(config_path, "r", encoding="utf-8") as f:
                     return tomlkit.parse(f.read()), str(config_path)
             except Exception as e:
                 print(f"Warning: Could not parse config at {config_path}: {e}")
                 continue
+    
     return {}, None
 
 
@@ -359,6 +375,28 @@ def run_setup_wizard() -> None:
             border_style="blue"
         ))
 
+        # Check for existing config to use as defaults
+        existing_config, existing_path = load_config_with_path()
+        modern_path = _get_mdl_config_path()
+        
+        # If legacy config exists but modern doesn't, offer migration
+        if existing_path and Path(existing_path) != modern_path and not modern_path.exists():
+            console.print(f"\n[yellow]Found legacy config at {existing_path}[/yellow]")
+            if Confirm.ask(f"Migrate this to the modern path ({modern_path})?", default=True):
+                try:
+                    modern_path.parent.mkdir(parents=True, exist_ok=True)
+                    # We'll write the new one later, but let's note we're migrating
+                    console.print("[green]✓ Values will be migrated to the new location.[/green]")
+                except Exception as e:
+                    console.print(f"[red]Could not create directory:[/red] {e}")
+
+        # Set defaults based on existing config
+        default_arl = existing_config.get("deezer", {}).get("arl", "")
+        default_folder = existing_config.get("downloads", {}).get("folder", "~/Music/Music Downloader")
+        default_quality = str(existing_config.get("deezer", {}).get("quality", "1"))
+        default_spotify_id = existing_config.get("spotify", {}).get("client_id", "")
+        default_spotify_secret = existing_config.get("spotify", {}).get("client_secret", "")
+
         # 1. Deezer ARL
         console.print("\n[bold]Step 1: Deezer ARL[/bold] [red](required)[/red]")
         console.print("[dim]Your ARL is a cookie used to authenticate with Deezer.[/dim]")
@@ -366,7 +404,7 @@ def run_setup_wizard() -> None:
         
         arl = ""
         while not arl:
-            arl = Prompt.ask("[cyan]Paste your Deezer ARL[/cyan]").strip()
+            arl = Prompt.ask("[cyan]Paste your Deezer ARL[/cyan]", default=default_arl).strip()
             if not arl:
                 console.print("[red]ARL is required.[/red]")
 
@@ -380,7 +418,6 @@ def run_setup_wizard() -> None:
 
         # 2. Download folder
         console.print("\n[bold]Step 2: Download Folder[/bold]")
-        default_folder = "~/Music/Music Downloader"
         folder = Prompt.ask(
             f"[cyan]Download folder[/cyan]", 
             default=default_folder
@@ -393,7 +430,7 @@ def run_setup_wizard() -> None:
         quality_str = Prompt.ask(
             "[cyan]Choose quality[/cyan]", 
             choices=["1", "2"], 
-            default="1"
+            default=default_quality
         )
         quality = int(quality_str)
 
@@ -401,25 +438,36 @@ def run_setup_wizard() -> None:
         console.print("\n[bold]Step 4: Spotify Credentials[/bold] [dim](optional)[/dim]")
         console.print("[dim]MDL has built-in defaults, but you can provide your own.[/dim]")
         
-        spotify_id = ""
-        spotify_secret = ""
-        if Confirm.ask("[cyan]Add custom Spotify credentials?[/cyan]", default=False):
-            spotify_id = Prompt.ask("[cyan]Spotify Client ID[/cyan]").strip()
-            spotify_secret = Prompt.ask("[cyan]Spotify Client Secret[/cyan]", password=True).strip()
+        spotify_id = default_spotify_id
+        spotify_secret = default_spotify_secret
+        
+        if Confirm.ask("[cyan]Add/Update custom Spotify credentials?[/cyan]", default=bool(spotify_id)):
+            spotify_id = Prompt.ask("[cyan]Spotify Client ID[/cyan]", default=spotify_id).strip()
+            spotify_secret = Prompt.ask("[cyan]Spotify Client Secret[/cyan]", default=spotify_secret, password=True).strip()
 
         config_content = _build_config_toml(arl, quality, folder, spotify_id, spotify_secret)
-        config_path = _get_mdl_config_path()
         
         try:
-            config_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(config_path, "w", encoding="utf-8") as f:
+            modern_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(modern_path, "w", encoding="utf-8") as f:
                 f.write(config_content)
             
             sr_path = ensure_streamrip_config_exists()
             merge_mdl_config_into_streamrip(sr_path, tomlkit.parse(config_content))
             
             console.print(f"\n[bold green]✓ Setup complete![/bold green]")
-            console.print(f"[dim]Config saved to:[/dim] [cyan]{config_path}[/cyan]")
+            console.print(f"[dim]Config saved to:[/dim] [cyan]{modern_path}[/cyan]")
+            
+            # If we migrated, suggest deleting the old one
+            if existing_path and Path(existing_path) != modern_path:
+                console.print(f"\n[yellow]Legacy config still exists at {existing_path}[/yellow]")
+                if Confirm.ask("Delete the legacy config file?", default=False):
+                    try:
+                        os.remove(existing_path)
+                        console.print("[green]✓ Legacy config deleted.[/green]")
+                    except Exception as e:
+                        console.print(f"[red]Error deleting file:[/red] {e}")
+
             console.print(f"\nTry: [bold white]mdl \"artist - track name\"[/bold white]\n")
         except Exception as e:
             console.print(f"\n[bold red]Error saving config:[/bold red] {e}")
