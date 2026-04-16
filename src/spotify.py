@@ -5,8 +5,12 @@ from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
 from pathlib import Path
 
 # Pre-configured default Spotify credentials (base64 obfuscated)
-_DEFAULT_CLIENT_ID = base64.b64decode(b"ZDczNzQ4YjdjZjU1NGJjNjg3NWQ2MmYyZmJhZmM5M2I=").decode()
-_DEFAULT_CLIENT_SECRET = base64.b64decode(b"MTc0YjRhOWMxNTMzNDU1M2I3NjhjMDViZDQwMTBmNGE=").decode()
+_DEFAULT_CLIENT_ID = base64.b64decode(
+    b"ZDczNzQ4YjdjZjU1NGJjNjg3NWQ2MmYyZmJhZmM5M2I="
+).decode()
+_DEFAULT_CLIENT_SECRET = base64.b64decode(
+    b"MTc0YjRhOWMxNTMzNDU1M2I3NjhjMDViZDQwMTBmNGE="
+).decode()
 
 def _get_spotify_app_client(client_id: str, client_secret: str) -> spotipy.Spotify:
     """App-only Spotify client for simple public metadata lookups."""
@@ -78,7 +82,9 @@ def get_spotify_tracks(
 
     # Set up Spotify client
     client_id = config_data.get("spotify", {}).get("client_id") or _DEFAULT_CLIENT_ID
-    client_secret = config_data.get("spotify", {}).get("client_secret") or _DEFAULT_CLIENT_SECRET
+    client_secret = (
+        config_data.get("spotify", {}).get("client_secret") or _DEFAULT_CLIENT_SECRET
+    )
 
     # Extract Spotify ID and type
     spotify_id, spotify_type = extract_spotify_info(spotify_link)

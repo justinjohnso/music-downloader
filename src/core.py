@@ -1,17 +1,29 @@
 import os
 import asyncio
-from typing import Optional, List, Dict
+import sys
+from typing import Optional, List, Dict, Literal, Tuple
 from streamrip.client import DeezerClient
 from streamrip.config import Config
-from streamrip.db import Database, Dummy
+from streamrip.db import Database, Downloads, Failed, Dummy
 from streamrip.media import PendingTrack
 from streamrip.metadata import AlbumMetadata
 from streamrip.media.artwork import download_artwork
 
+ANSI_RESET = "\033[0m"
+ANSI_CYAN = "\033[96m"
+ANSI_YELLOW = "\033[93m"
+ANSI_GREEN = "\033[92m"
+ANSI_BOLD = "\033[1m"
+
 
 async def download_track_with_client(
-    client, config, search_string: str, db=None, verbose: bool = False
-) -> Optional[str]:
+    client,
+    config,
+    search_string: str,
+    db=None,
+    verbose: bool = False,
+    duplicate_mode: Literal["prompt", "skip", "redownload"] = "prompt",
+) -> Tuple[Literal["downloaded", "duplicate_skipped", "failed"], Optional[str]]:
     """
     Search for a track on Deezer using the provided client and download the first result.
 
@@ -23,7 +35,7 @@ async def download_track_with_client(
         verbose (bool): Whether to print detailed output
 
     Returns:
-        The file path if successful, None otherwise
+        Tuple of (status, track label)
     """
     try:
         # Search for the track
@@ -31,7 +43,7 @@ async def download_track_with_client(
             results = await client.search(query=search_string, media_type="track")
         except Exception as e:
             print(f"Error during search: {e}")
-            return None
+            return "failed", None
 
         # Process search results
         tracks = results
@@ -39,7 +51,7 @@ async def download_track_with_client(
             tracks = tracks["data"]
         if not tracks:
             print(f"No tracks found for query: '{search_string}'")
-            return None
+            return "failed", None
 
         track = tracks[0]
         if isinstance(track, dict) and "data" in track:
@@ -57,11 +69,22 @@ async def download_track_with_client(
 
         if not track_id:
             print("Error: Could not determine track ID.")
-            return None
+            return "failed", None
 
-        # Use provided database or create a new one
+        # Use provided database or create one from config.
         if db is None:
-            db = Database(downloads=Dummy(), failed=Dummy())
+            db = _build_database_from_config(config)
+
+        track_label = f"{title} by {artist}"
+        effective_db = db
+        if db.downloaded(str(track_id)):
+            action = _resolve_duplicate_action(track_label, duplicate_mode)
+            if action == "skip":
+                print(_warn(f"Track already downloaded, skipping: {track_label}"))
+                return "duplicate_skipped", track_label
+            print(_ok(f"Duplicate detected, re-downloading: {track_label}"))
+            effective_db = Database(downloads=Dummy(), failed=db.failed)
+
         download_folder = config.file.downloads.folder
 
         try:
@@ -95,34 +118,29 @@ async def download_track_with_client(
                 client=client,
                 config=config,
                 folder=download_folder,
-                db=db,
+                db=effective_db,
                 cover_path=cover_path,
             )
         except Exception as e:
             print(f"Error preparing download: {e}")
-            return None
+            return "failed", None
 
         try:
             # Resolve and download the track
             print(f"Downloading '{title}' by {artist}...")
             resolved = await pending.resolve()
-
             if resolved is None:
-                print(
-                    "Error downloading track: Download unavailable, nothing found."
-                )
-                return None
-
+                print(_warn(f"Track already downloaded, skipping: {track_label}"))
+                return "duplicate_skipped", track_label
             await resolved.rip()
             print(f"Successfully downloaded '{title}' by {artist}")
-            # Return the expected file path (though we don't have it exactly)
-            return f"{title} by {artist}"  # Placeholder, as exact path is hard to determine
+            return "downloaded", track_label
         except Exception as e:
             print(f"Error downloading track: {e}")
-            return None
+            return "failed", track_label
     except Exception as e:
         print(f"Error during track processing: {e}")
-        return None
+        return "failed", None
 
 
 async def download_multiple_tracks(
@@ -149,7 +167,7 @@ async def download_multiple_tracks(
     )
 
     # Load configuration from mdl-config.toml
-    config_data, mdl_config_path = load_config_with_path()
+    config_data, mdl_config_path = load_config_with_path(verbose=verbose)
 
     if verbose and mdl_config_path:
         print(f"Using mdl config: {mdl_config_path}")
@@ -165,7 +183,7 @@ async def download_multiple_tracks(
     apply_config_overrides(config, config_data)
     config.session.update_toml()  # Sync session changes back to file config
     client = DeezerClient(config)
-    db = Database(downloads=Dummy(), failed=Dummy())
+    db = _build_database_from_config(config)
 
     try:
         await client.login()
@@ -174,14 +192,16 @@ async def download_multiple_tracks(
             return
         print("Logged in to Deezer.")
 
-        # Debug: check what download folder is actually being used
-        print(
-            f"Actual download folder from config.file: {config.file.downloads.folder}"
-        )
-        print(f"Session download folder: {config.session.downloads.folder}")
+        if verbose:
+            print(
+                f"Actual download folder from config.file: {config.file.downloads.folder}"
+            )
+            print(f"Session download folder: {config.session.downloads.folder}")
 
         successful_downloads = 0
         failed_downloads = 0
+        duplicate_downloads = 0
+        duplicate_tracks: List[Dict[str, str]] = []
 
         total_tracks = len(tracks)
         print(f"Processing {total_tracks} tracks...")
@@ -195,12 +215,23 @@ async def download_multiple_tracks(
             print(f"\nProcessing track {i + 1}/{total_tracks}: {artist} - {title}")
 
             # Use the download function with shared client
-            result = await download_track_with_client(
-                client, config, search_string, db, verbose
+            status, track_label = await download_track_with_client(
+                client,
+                config,
+                search_string,
+                db,
+                verbose,
+                duplicate_mode="skip",
             )
 
-            if result:
+            if status == "downloaded":
                 successful_downloads += 1
+            elif status == "duplicate_skipped":
+                duplicate_downloads += 1
+                if track_label:
+                    duplicate_tracks.append(
+                        {"label": track_label, "search_string": search_string}
+                    )
             else:
                 failed_downloads += 1
 
@@ -209,8 +240,36 @@ async def download_multiple_tracks(
                 await asyncio.sleep(1)
 
         print(
-            f"\nDownload summary: {successful_downloads} successful, {failed_downloads} failed out of {total_tracks} total"
+            f"\nDownload summary: {successful_downloads} successful, {duplicate_downloads} duplicates skipped, {failed_downloads} failed out of {total_tracks} total"
         )
+        tracks_to_redownload = _offer_duplicate_review(duplicate_tracks)
+        if tracks_to_redownload:
+            print(
+                _action(
+                    f"\nRe-downloading {len(tracks_to_redownload)} selected duplicate track(s)..."
+                )
+            )
+            redownload_successful = 0
+            redownload_failed = 0
+            for track in tracks_to_redownload:
+                status, _ = await download_track_with_client(
+                    client,
+                    config,
+                    track["search_string"],
+                    db,
+                    verbose,
+                    duplicate_mode="redownload",
+                )
+                if status == "downloaded":
+                    redownload_successful += 1
+                else:
+                    redownload_failed += 1
+
+            print(
+                _info(
+                    f"Re-download summary: {redownload_successful} successful, {redownload_failed} failed"
+                )
+            )
 
         # Generate M3U playlist file for Spotify playlists
         if is_playlist and successful_downloads > 0 and playlist_name:
@@ -259,7 +318,7 @@ async def download_multiple_tracks(
 
                 if verbose:
                     print("Successfully closed client session")
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 if verbose:
                     print(f"Error while closing client session: {e}")
 
@@ -282,7 +341,7 @@ async def download_track(
     )
 
     # Load configuration from mdl-config.toml
-    config_data, mdl_config_path = load_config_with_path()
+    config_data, mdl_config_path = load_config_with_path(verbose=verbose)
 
     if verbose and mdl_config_path:
         print(f"Using mdl config: {mdl_config_path}")
@@ -306,14 +365,16 @@ async def download_track(
             return
         print("Logged in to Deezer.")
 
-        # Debug: check what download folder is actually being used
-        print(
-            f"Actual download folder from config.file: {config.file.downloads.folder}"
-        )
-        print(f"Session download folder: {config.session.downloads.folder}")
+        if verbose:
+            print(
+                f"Actual download folder from config.file: {config.file.downloads.folder}"
+            )
+            print(f"Session download folder: {config.session.downloads.folder}")
 
         # Use the shared download function
-        await download_track_with_client(client, config, search_string, verbose=verbose)
+        await download_track_with_client(
+            client, config, search_string, verbose=verbose, duplicate_mode="prompt"
+        )
 
     finally:
         # Clean up client session
@@ -340,9 +401,267 @@ async def download_track(
 
                 if verbose:
                     print("Successfully closed client session")
-            except Exception as e:
+            except (Exception, asyncio.CancelledError) as e:
                 if verbose:
                     print(f"Error while closing client session: {e}")
+
+
+def _build_database_from_config(config: Config) -> Database:
+    """Create a streamrip Database that respects the active config flags and paths."""
+    database_config = config.session.database
+    downloads_db = (
+        Downloads(database_config.downloads_path)
+        if database_config.downloads_enabled
+        else Dummy()
+    )
+    failed_db = (
+        Failed(database_config.failed_downloads_path)
+        if database_config.failed_downloads_enabled
+        else Dummy()
+    )
+    return Database(downloads=downloads_db, failed=failed_db)
+
+
+def _can_prompt_user() -> bool:
+    return hasattr(sys.stdin, "isatty") and sys.stdin.isatty()
+
+
+def _colorize(text: str, *styles: str) -> str:
+    if not _can_prompt_user():
+        return text
+    return f"{''.join(styles)}{text}{ANSI_RESET}"
+
+
+def _info(text: str) -> str:
+    return _colorize(text, ANSI_CYAN)
+
+
+def _action(text: str) -> str:
+    return _colorize(text, ANSI_BOLD, ANSI_CYAN)
+
+
+def _warn(text: str) -> str:
+    return _colorize(text, ANSI_BOLD, ANSI_YELLOW)
+
+
+def _ok(text: str) -> str:
+    return _colorize(text, ANSI_BOLD, ANSI_GREEN)
+
+
+def _resolve_duplicate_action(
+    track_label: str, duplicate_mode: Literal["prompt", "skip", "redownload"]
+) -> Literal["skip", "redownload"]:
+    if duplicate_mode == "redownload":
+        return "redownload"
+    if duplicate_mode == "skip" or not _can_prompt_user():
+        return "skip"
+
+    prompt = (
+        f"{_warn('Duplicate found:')} {_info(track_label)}\n"
+        f"{_action('Download again? [y/n]:')} "
+    )
+    while True:
+        response = input(prompt).strip().lower()
+        if response in {"", "n", "no"}:
+            return "skip"
+        if response in {"y", "yes"}:
+            return "redownload"
+        print(_warn("Invalid choice. Enter y or n."))
+
+
+def _offer_duplicate_review(duplicate_tracks: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    if not duplicate_tracks:
+        return []
+
+    if not _can_prompt_user():
+        print(
+            f"Skipped {len(duplicate_tracks)} duplicate track(s). Re-run with --verbose to see per-track output."
+        )
+        return []
+
+    try:
+        response = input(
+            _action(
+                f"Skipped {len(duplicate_tracks)} duplicate track(s). Review [r] or continue [enter]: "
+            )
+        ).strip().lower()
+    except KeyboardInterrupt:
+        print(_warn("\nDuplicate review cancelled."))
+        return []
+    if response != "r":
+        return []
+
+    if os.name == "posix":
+        try:
+            return _offer_duplicate_review_arrow_mode(duplicate_tracks)
+        except KeyboardInterrupt:
+            print(_warn("\nDuplicate review cancelled."))
+            return []
+        except Exception:
+            # Fall back to prompt commands if raw key handling is unavailable.
+            pass
+
+    return _offer_duplicate_review_line_mode(duplicate_tracks)
+
+
+def _offer_duplicate_review_arrow_mode(
+    duplicate_tracks: List[Dict[str, str]]
+) -> List[Dict[str, str]]:
+    import curses
+
+    selected_indices: set[int] = set()
+    cursor_index = 0
+    status_line = "↑/↓ move • Enter/space/←/→ toggle • a all • d run selected • q quit"
+
+    def _selector(stdscr):
+        nonlocal cursor_index, selected_indices, status_line
+
+        if curses.has_colors():
+            curses.start_color()
+            curses.use_default_colors()
+            curses.init_pair(1, curses.COLOR_CYAN, -1)   # info/action
+            curses.init_pair(2, curses.COLOR_YELLOW, -1) # warning/highlighted labels
+            curses.init_pair(3, curses.COLOR_GREEN, -1)  # selected
+
+        def _style(pair: int, bold: bool = False, reverse: bool = False) -> int:
+            attrs = curses.color_pair(pair) if curses.has_colors() else curses.A_NORMAL
+            if bold:
+                attrs |= curses.A_BOLD
+            if reverse:
+                attrs |= curses.A_REVERSE
+            return attrs
+
+        curses.curs_set(0)
+        stdscr.keypad(True)
+
+        while True:
+            height, width = stdscr.getmaxyx()
+            stdscr.erase()
+            stdscr.addstr(
+                0,
+                0,
+                "Toggle duplicate tracks for re-download:"[: max(0, width - 1)],
+                _style(1, bold=True),
+            )
+            stdscr.addstr(1, 0, status_line[: max(0, width - 1)], _style(1))
+
+            max_rows = max(0, height - 4)
+            start_index = 0
+            if cursor_index >= max_rows and max_rows > 0:
+                start_index = cursor_index - max_rows + 1
+            visible_tracks = duplicate_tracks[start_index : start_index + max_rows]
+
+            for row_offset, track in enumerate(visible_tracks, start=0):
+                idx = start_index + row_offset
+                pointer = ">" if idx == cursor_index else " "
+                marker = "[x]" if idx in selected_indices else "[ ]"
+                line = f"{pointer} {marker} {idx + 1}. {track['label']}"
+                line_attr = _style(2 if idx == cursor_index else 1, bold=idx == cursor_index)
+                if idx in selected_indices:
+                    line_attr = _style(3, bold=True, reverse=(idx == cursor_index))
+                elif idx == cursor_index:
+                    line_attr = _style(2, bold=True, reverse=True)
+                stdscr.addstr(row_offset + 2, 0, line[: max(0, width - 1)], line_attr)
+
+            stdscr.addstr(height - 1, 0, "Selection: "[: max(0, width - 1)], _style(1, bold=True))
+            stdscr.refresh()
+
+            key = stdscr.getch()
+            if key == 3:  # Ctrl+C
+                raise KeyboardInterrupt
+            if key in (curses.KEY_UP,):
+                cursor_index = (cursor_index - 1) % len(duplicate_tracks)
+                continue
+            if key in (curses.KEY_DOWN,):
+                cursor_index = (cursor_index + 1) % len(duplicate_tracks)
+                continue
+            if key in (curses.KEY_LEFT, curses.KEY_RIGHT, ord(" "), ord("t"), ord("T")):
+                if cursor_index in selected_indices:
+                    selected_indices.remove(cursor_index)
+                else:
+                    selected_indices.add(cursor_index)
+                continue
+            if key in (ord("a"), ord("A")):
+                if len(selected_indices) == len(duplicate_tracks):
+                    selected_indices.clear()
+                else:
+                    selected_indices = set(range(len(duplicate_tracks)))
+                continue
+            if key in (10, 13, curses.KEY_ENTER):
+                if cursor_index in selected_indices:
+                    selected_indices.remove(cursor_index)
+                else:
+                    selected_indices.add(cursor_index)
+                continue
+            if key in (ord("d"), ord("D")):
+                if selected_indices:
+                    return [duplicate_tracks[i] for i in sorted(selected_indices)]
+                return []
+            if key in (ord("q"), ord("Q")):
+                return []
+
+    return curses.wrapper(_selector)
+
+
+def _offer_duplicate_review_line_mode(
+    duplicate_tracks: List[Dict[str, str]]
+) -> List[Dict[str, str]]:
+    from rich.prompt import Prompt
+
+    selected_indices: set[int] = set()
+    cursor_index = 0
+
+    while True:
+        print(_info("\nToggle duplicate tracks for re-download:"))
+        print(
+            _info(
+                "Use [n] next, [p] previous, [enter]/[t] toggle current, [a] all, [d] download selected, [q] quit"
+            )
+        )
+        for idx, track in enumerate(duplicate_tracks, start=1):
+            pointer = _action(">") if (idx - 1) == cursor_index else " "
+            marker = _ok("[x]") if (idx - 1) in selected_indices else _info("[ ]")
+            print(f"{pointer} {marker} {_info(str(idx) + '.')} {_ok(track['label'])}")
+
+        try:
+            response = Prompt.ask("[bold cyan]Selection[/bold cyan]", default="").strip().lower()
+        except KeyboardInterrupt:
+            print(_warn("\nDuplicate review cancelled."))
+            return []
+
+        if response == "":
+            if cursor_index in selected_indices:
+                selected_indices.remove(cursor_index)
+            else:
+                selected_indices.add(cursor_index)
+            continue
+        if response == "d":
+            if not selected_indices:
+                print(_warn("No tracks selected. Toggle at least one item first."))
+                continue
+            return [duplicate_tracks[i] for i in sorted(selected_indices)]
+        if response in {"n", "next"}:
+            cursor_index = (cursor_index + 1) % len(duplicate_tracks)
+            continue
+        if response in {"p", "prev", "previous"}:
+            cursor_index = (cursor_index - 1) % len(duplicate_tracks)
+            continue
+        if response == "a":
+            if len(selected_indices) == len(duplicate_tracks):
+                selected_indices.clear()
+            else:
+                selected_indices = set(range(len(duplicate_tracks)))
+            continue
+        if response in {"q", "quit"}:
+            return []
+        if response in {"t", "toggle"}:
+            if cursor_index in selected_indices:
+                selected_indices.remove(cursor_index)
+            else:
+                selected_indices.add(cursor_index)
+            continue
+
+        print(_warn("Invalid selection. Use [n], [p], [t], [a], [d], [q] (quit), or Enter."))
 
 
 async def process_spotify_link(
