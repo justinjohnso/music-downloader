@@ -1,38 +1,3 @@
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-poetry.lock
-.pytest_cache/
-.cache
-
-# Virtual Environment
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
 # Audio files / downloaded content
 *.mp3
 *.flac
@@ -49,41 +14,21 @@ venv.bak/
 **/Intake/
 **/.artwork/
 
-# IDE specific files
-.idea/
-.vscode/
-*.swp
-*.swo
-.DS_Store
-.~*
-
 # Streamrip data
 *.db
-streamrip/
 .streamrip/
 
-# Logs
-*.log
-logs/
+# Tool caches and temporary files
+.cache
+.ruff_cache
+.pytest_cache
+__pycache__/
+*.py[cod]
+.DS_Store
 
 # Local configuration
 mdl-config.toml
 .config/
-AGENTS.md
 
-# Jupyter Notebooks (if used for development/testing)
-.ipynb_checkpoints
-*.ipynb
-
-# Mac OS specific
-.DS_Store
-.AppleDouble
-.LSOverride
-._*
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
+# AI Agents
+!AGENTS.md
