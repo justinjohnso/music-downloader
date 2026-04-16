@@ -59,13 +59,13 @@ refresh_token = ""
 # Tokens last 1 week after refresh. This is the Unix timestamp of the expiration
 # time. If you haven't used streamrip in more than a week, you may have to log
 # in again using `rip config --tidal`
-token_expiry = ""
-
 [deezer]
 # 0, 1, or 2
 # This only applies to paid Deezer subscriptions. Those using deezloader
 # are automatically limited to quality = 1
 quality = 2
+# If the target quality is not available, fallback to best quality available
+lower_quality_if_not_available = true
 # An authentication cookie that allows streamrip to use your Deezer account
 # See https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie
 # for instructions on how to find this
@@ -77,9 +77,11 @@ use_deezloader = true
 # back to deezloader, which is unreliable
 deezloader_warnings = true
 
-[soundcloud]
-# Only 0 is available for now
-quality = 0
+...
+
+[misc]
+# Metadata to identify this config file. Do not change.
+version = "2.2.0"
 # This changes periodically, so it needs to be updated
 client_id = ""
 app_version = ""
