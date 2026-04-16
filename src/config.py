@@ -73,40 +73,6 @@ def load_config() -> dict:
     return data
 
 
-def get_backend_config(
-    config_data: dict | None = None,
-) -> tuple[str | None, str | None]:
-    """Get optional backend Spotify resolve settings from mdl-config.toml.
-
-    Args:
-        config_data: Optional parsed config data. If omitted, config is loaded.
-
-    Returns:
-        Tuple of (resolve_url, api_key). Missing/blank values are returned as None.
-    """
-    if config_data is None:
-        config_data = load_config()
-
-    backend = config_data.get("backend", {})
-    if not isinstance(backend, dict):
-        return None, None
-
-    resolve_url = backend.get("resolve_url")
-    api_key = backend.get("api_key")
-
-    if isinstance(resolve_url, str):
-        resolve_url = resolve_url.strip() or None
-    else:
-        resolve_url = None
-
-    if isinstance(api_key, str):
-        api_key = api_key.strip() or None
-    else:
-        api_key = None
-
-    return resolve_url, api_key
-
-
 def is_streamrip_config_customized() -> bool:
     """Check if the user's streamrip config differs from the default template."""
     config_path = Path(get_default_config_path())
@@ -381,44 +347,83 @@ def _build_config_toml(arl: str, quality: int, folder: str, spotify_id: str = ""
 
 
 def run_setup_wizard() -> None:
-    print("\n=== Music Downloader Setup ===\n")
-    print("Step 1: Deezer ARL (required)")
-    print("Get it at: https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie\n")
-    arl = ""
-    while not arl:
-        arl = input("Paste your Deezer ARL: ").strip()
-        if not arl: print("ARL is required. Please paste it.")
+    from rich.console import Console
+    from rich.prompt import Prompt, Confirm
+    from rich.panel import Panel
 
-    print("\nValidating ARL...")
-    if not _validate_deezer_arl(arl):
-        print("Warning: Could not validate ARL. Continuing anyway.\n")
-    else:
-        print("ARL is valid!\n")
+    console = Console()
+    try:
+        console.print(Panel.fit(
+            "[bold cyan]Music Downloader Setup[/bold cyan]",
+            subtitle="[dim]v1.0[/dim]",
+            border_style="blue"
+        ))
 
-    default_folder = "~/Music/Music Downloader"
-    print(f"Step 2: Download folder (default: {default_folder})")
-    folder = input(f"Download folder [{default_folder}]: ").strip() or default_folder
-    print()
+        # 1. Deezer ARL
+        console.print("\n[bold]Step 1: Deezer ARL[/bold] [red](required)[/red]")
+        console.print("[dim]Your ARL is a cookie used to authenticate with Deezer.[/dim]")
+        console.print("[dim]Find it here:[/dim] [link=https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie]streamrip wiki[/link]\n")
+        
+        arl = ""
+        while not arl:
+            arl = Prompt.ask("[cyan]Paste your Deezer ARL[/cyan]").strip()
+            if not arl:
+                console.print("[red]ARL is required.[/red]")
 
-    print("Step 3: Audio quality (1=MP3, 2=FLAC)")
-    quality_input = input("Quality [1]: ").strip() or "1"
-    quality = int(quality_input) if quality_input in ("0", "1", "2") else 1
-    print()
+        console.print("\n[yellow]Validating ARL...[/yellow]")
+        if not _validate_deezer_arl(arl):
+            console.print("[bold red]Warning:[/bold red] Could not validate ARL. It might be expired or invalid.")
+            if not Confirm.ask("Continue anyway?", default=True):
+                return
+        else:
+            console.print("[bold green]✓ ARL is valid![/bold green]")
 
-    print("Step 4: Spotify credentials (optional)")
-    custom_spotify = input("Add Spotify fallback credentials? [y/N]: ").strip().lower()
-    spotify_id = spotify_secret = ""
-    if custom_spotify == "y":
-        spotify_id = input("Spotify Client ID: ").strip()
-        spotify_secret = input("Spotify Client Secret: ").strip()
-    print()
+        # 2. Download folder
+        console.print("\n[bold]Step 2: Download Folder[/bold]")
+        default_folder = "~/Music/Music Downloader"
+        folder = Prompt.ask(
+            f"[cyan]Download folder[/cyan]", 
+            default=default_folder
+        ).strip()
 
-    config_content = _build_config_toml(arl, quality, folder, spotify_id, spotify_secret)
-    config_path = _get_mdl_config_path()
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(config_path, "w", encoding="utf-8") as f: f.write(config_content)
-    print(f"Config saved to: {config_path}")
-    sr_path = ensure_streamrip_config_exists()
-    merge_mdl_config_into_streamrip(sr_path, tomlkit.parse(config_content))
-    print(f"Streamrip config updated at: {sr_path}")
-    print('\nSetup complete! Try: mdl "artist - track name"')
+        # 3. Quality
+        console.print("\n[bold]Step 3: Audio Quality[/bold]")
+        console.print("  [bold white]1[/bold white] = 320kbps MP3 [dim](Standard)[/dim]")
+        console.print("  [bold white]2[/bold white] = FLAC [dim](Lossless, requires paid Deezer)[/dim]")
+        quality_str = Prompt.ask(
+            "[cyan]Choose quality[/cyan]", 
+            choices=["1", "2"], 
+            default="1"
+        )
+        quality = int(quality_str)
+
+        # 4. Spotify
+        console.print("\n[bold]Step 4: Spotify Credentials[/bold] [dim](optional)[/dim]")
+        console.print("[dim]MDL has built-in defaults, but you can provide your own.[/dim]")
+        
+        spotify_id = ""
+        spotify_secret = ""
+        if Confirm.ask("[cyan]Add custom Spotify credentials?[/cyan]", default=False):
+            spotify_id = Prompt.ask("[cyan]Spotify Client ID[/cyan]").strip()
+            spotify_secret = Prompt.ask("[cyan]Spotify Client Secret[/cyan]", password=True).strip()
+
+        config_content = _build_config_toml(arl, quality, folder, spotify_id, spotify_secret)
+        config_path = _get_mdl_config_path()
+        
+        try:
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(config_path, "w", encoding="utf-8") as f:
+                f.write(config_content)
+            
+            sr_path = ensure_streamrip_config_exists()
+            merge_mdl_config_into_streamrip(sr_path, tomlkit.parse(config_content))
+            
+            console.print(f"\n[bold green]✓ Setup complete![/bold green]")
+            console.print(f"[dim]Config saved to:[/dim] [cyan]{config_path}[/cyan]")
+            console.print(f"\nTry: [bold white]mdl \"artist - track name\"[/bold white]\n")
+        except Exception as e:
+            console.print(f"\n[bold red]Error saving config:[/bold red] {e}")
+
+    except KeyboardInterrupt:
+        console.print("\n\n[yellow]Setup cancelled. Exiting...[/yellow]")
+        return

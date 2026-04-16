@@ -1,6 +1,11 @@
+import base64
 from typing import List, Dict, Tuple, Any
 import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
+
+# Pre-configured default Spotify credentials (base64 obfuscated)
+_DEFAULT_CLIENT_ID = base64.b64decode(b"ZDczNzQ4YjdjZjU1NGJjNjg3NWQ2MmYyZmJhZmM5M2I=").decode()
+_DEFAULT_CLIENT_SECRET = base64.b64decode(b"MTc0YjRhOWMxNTMzNDU1M2I3NjhjMDViZDQwMTBmNGE=").decode()
 
 
 def is_spotify_link(link: str) -> bool:
@@ -45,15 +50,8 @@ def get_spotify_tracks(
     config_data = load_config()
 
     # Set up Spotify client
-    client_id = config_data.get("spotify", {}).get("client_id")
-    client_secret = config_data.get("spotify", {}).get("client_secret")
-
-    if not client_id or not client_secret:
-        raise ValueError(
-            "Spotify API credentials not found in mdl-config.toml.\n"
-            "Please set client_id and client_secret in the [spotify] section of mdl-config.toml.\n"
-            "Get them from: https://developer.spotify.com/dashboard/"
-        )
+    client_id = config_data.get("spotify", {}).get("client_id") or _DEFAULT_CLIENT_ID
+    client_secret = config_data.get("spotify", {}).get("client_secret") or _DEFAULT_CLIENT_SECRET
 
     sp = spotipy.Spotify(
         auth_manager=SpotifyClientCredentials(
