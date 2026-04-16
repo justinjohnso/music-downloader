@@ -9,7 +9,9 @@ from streamrip.metadata import AlbumMetadata
 from streamrip.media.artwork import download_artwork
 
 
-async def download_track_with_client(client, config, search_string: str, db=None, verbose: bool = False) -> Optional[str]:
+async def download_track_with_client(
+    client, config, search_string: str, db=None, verbose: bool = False
+) -> Optional[str]:
     """
     Search for a track on Deezer using the provided client and download the first result.
 
@@ -80,11 +82,11 @@ async def download_track_with_client(client, config, search_string: str, db=None
                 artwork_folder,
                 album.covers,
                 config.file.artwork,
-                for_playlist=False
+                for_playlist=False,
             )
 
             if verbose:
-                print(f"Downloaded album artwork")
+                print("Downloaded album artwork")
 
             # Create a PendingTrack with all required parameters
             pending = PendingTrack(
@@ -94,7 +96,7 @@ async def download_track_with_client(client, config, search_string: str, db=None
                 config=config,
                 folder=download_folder,
                 db=db,
-                cover_path=cover_path
+                cover_path=cover_path,
             )
         except Exception as e:
             print(f"Error preparing download: {e}")
@@ -116,7 +118,13 @@ async def download_track_with_client(client, config, search_string: str, db=None
         return None
 
 
-async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: str = None, verbose: bool = False, is_playlist: bool = False, playlist_name: Optional[str] = None) -> None:
+async def download_multiple_tracks(
+    tracks: List[Dict[str, str]],
+    config_path: str = None,
+    verbose: bool = False,
+    is_playlist: bool = False,
+    playlist_name: Optional[str] = None,
+) -> None:
     """
     Download multiple tracks from Deezer based on artist and title information.
 
@@ -127,7 +135,11 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
         is_playlist: Whether this is from a Spotify playlist
         playlist_name: Name of the playlist if applicable
     """
-    from src.config import load_config, ensure_streamrip_config_exists, apply_config_overrides
+    from src.config import (
+        load_config,
+        ensure_streamrip_config_exists,
+        apply_config_overrides,
+    )
 
     # Load configuration from mdl-config.toml
     config_data = load_config()
@@ -153,7 +165,9 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
         print("Logged in to Deezer.")
 
         # Debug: check what download folder is actually being used
-        print(f"Actual download folder from config.file: {config.file.downloads.folder}")
+        print(
+            f"Actual download folder from config.file: {config.file.downloads.folder}"
+        )
         print(f"Session download folder: {config.session.downloads.folder}")
 
         successful_downloads = 0
@@ -168,10 +182,12 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
             title = track.get("title", "")
             search_string = f"{artist} {title}"
 
-            print(f"\nProcessing track {i+1}/{total_tracks}: {artist} - {title}")
+            print(f"\nProcessing track {i + 1}/{total_tracks}: {artist} - {title}")
 
             # Use the download function with shared client
-            result = await download_track_with_client(client, config, search_string, db, verbose)
+            result = await download_track_with_client(
+                client, config, search_string, db, verbose
+            )
 
             if result:
                 successful_downloads += 1
@@ -182,20 +198,26 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
             if i < total_tracks - 1:
                 await asyncio.sleep(1)
 
-        print(f"\nDownload summary: {successful_downloads} successful, {failed_downloads} failed out of {total_tracks} total")
+        print(
+            f"\nDownload summary: {successful_downloads} successful, {failed_downloads} failed out of {total_tracks} total"
+        )
 
         # Generate M3U playlist file for Spotify playlists
         if is_playlist and successful_downloads > 0 and playlist_name:
             download_folder = config.file.downloads.folder
             # Sanitize playlist name for filename
-            safe_name = "".join(c for c in playlist_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+            safe_name = "".join(
+                c for c in playlist_name if c.isalnum() or c in (" ", "-", "_")
+            ).rstrip()
             m3u_filename = f"{safe_name}.m3u"
             m3u_path = os.path.join(download_folder, m3u_filename)
             try:
                 # List all .mp3 files in the download folder
-                mp3_files = [f for f in os.listdir(download_folder) if f.endswith('.mp3')]
+                mp3_files = [
+                    f for f in os.listdir(download_folder) if f.endswith(".mp3")
+                ]
                 mp3_files.sort()  # Sort for consistent order
-                with open(m3u_path, 'w', encoding='utf-8') as f:
+                with open(m3u_path, "w", encoding="utf-8") as f:
                     for mp3 in mp3_files:
                         f.write(f"{mp3}\n")
                 print(f"Generated M3U playlist '{playlist_name}' at: {m3u_path}")
@@ -232,7 +254,9 @@ async def download_multiple_tracks(tracks: List[Dict[str, str]], config_path: st
                     print(f"Error while closing client session: {e}")
 
 
-async def download_track(search_string: str, config_path: str = None, verbose: bool = False) -> None:
+async def download_track(
+    search_string: str, config_path: str = None, verbose: bool = False
+) -> None:
     """
     Search for a track on Deezer using the provided search string and download the first result.
 
@@ -241,7 +265,11 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
         config_path (str, optional): Path to streamrip config file.
         verbose (bool): Whether to print detailed output.
     """
-    from src.config import load_config, ensure_streamrip_config_exists, apply_config_overrides
+    from src.config import (
+        load_config,
+        ensure_streamrip_config_exists,
+        apply_config_overrides,
+    )
 
     # Load configuration from mdl-config.toml
     config_data = load_config()
@@ -266,7 +294,9 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
         print("Logged in to Deezer.")
 
         # Debug: check what download folder is actually being used
-        print(f"Actual download folder from config.file: {config.file.downloads.folder}")
+        print(
+            f"Actual download folder from config.file: {config.file.downloads.folder}"
+        )
         print(f"Session download folder: {config.session.downloads.folder}")
 
         # Use the shared download function
@@ -302,7 +332,9 @@ async def download_track(search_string: str, config_path: str = None, verbose: b
                     print(f"Error while closing client session: {e}")
 
 
-async def process_spotify_link(spotify_link: str, config_path: str = None, verbose: bool = False) -> None:
+async def process_spotify_link(
+    spotify_link: str, config_path: str = None, verbose: bool = False
+) -> None:
     """
     Process a Spotify link to download tracks.
 
@@ -315,10 +347,12 @@ async def process_spotify_link(spotify_link: str, config_path: str = None, verbo
 
     try:
         # Get tracks from Spotify
-        print(f"Retrieving track information from Spotify...")
+        print("Retrieving track information from Spotify...")
 
         # Run the synchronous Spotify API call in a thread
-        tracks, info = await asyncio.get_event_loop().run_in_executor(None, get_spotify_tracks, spotify_link)
+        tracks, info = await asyncio.get_event_loop().run_in_executor(
+            None, get_spotify_tracks, spotify_link
+        )
 
         if not tracks:
             print("No tracks found in the Spotify link.")
@@ -327,8 +361,10 @@ async def process_spotify_link(spotify_link: str, config_path: str = None, verbo
         print(f"Found {len(tracks)} tracks")
 
         # Download tracks
-        playlist_name = info['name'] if info['is_playlist'] else None
-        await download_multiple_tracks(tracks, config_path, verbose, info['is_playlist'], playlist_name)
+        playlist_name = info["name"] if info["is_playlist"] else None
+        await download_multiple_tracks(
+            tracks, config_path, verbose, info["is_playlist"], playlist_name
+        )
 
     except Exception as e:
         print(f"Error processing Spotify link: {e}")

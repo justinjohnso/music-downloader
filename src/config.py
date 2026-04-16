@@ -9,7 +9,7 @@ from streamrip.config import Config
 
 def load_config() -> dict:
     """Load configuration from mdl-config.toml file.
-    
+
     Searches for the config file in the following order:
     1. Current working directory
     2. User's home directory
@@ -19,18 +19,22 @@ def load_config() -> dict:
         Path.cwd() / "mdl-config.toml",
         Path.home() / "mdl-config.toml",
     ]
-    
+
     # Add platform-specific config directory
     if sys.platform == "darwin":  # macOS
-        search_paths.append(Path.home() / "Library/Application Support/music-downloader/mdl-config.toml")
+        search_paths.append(
+            Path.home() / "Library/Application Support/music-downloader/mdl-config.toml"
+        )
     elif sys.platform == "win32":  # Windows
-        search_paths.append(Path.home() / "AppData/Roaming/music-downloader/mdl-config.toml")
+        search_paths.append(
+            Path.home() / "AppData/Roaming/music-downloader/mdl-config.toml"
+        )
     else:  # Linux and others
         search_paths.append(Path.home() / ".config/music-downloader/mdl-config.toml")
-    
+
     for config_path in search_paths:
         if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 return tomlkit.parse(f.read())
     return {}
 
@@ -41,15 +45,19 @@ def ensure_streamrip_config_exists() -> str:
 
     # Check if config file exists
     if not Path(config_path).exists():
-        print(f"Streamrip config not found at {config_path}, creating default config...")
+        print(
+            f"Streamrip config not found at {config_path}, creating default config..."
+        )
         try:
             # Create the config directory if it doesn't exist
             Path(config_path).parent.mkdir(parents=True, exist_ok=True)
 
             # Use streamrip's command to create the default config
             import subprocess
-            result = subprocess.run(['rip', 'config', 'open'],
-                                   capture_output=True, text=True, timeout=30)
+
+            result = subprocess.run(
+                ["rip", "config", "open"], capture_output=True, text=True, timeout=30
+            )
 
             if result.returncode == 0 and Path(config_path).exists():
                 print(f"Created default streamrip config at {config_path}")
@@ -58,11 +66,13 @@ def ensure_streamrip_config_exists() -> str:
 
         except Exception as e:
             print(f"Warning: Could not create default streamrip config: {e}")
-            print("You may need to run 'rip config open' manually to create the config file.")
+            print(
+                "You may need to run 'rip config open' manually to create the config file."
+            )
             # As a fallback, try to create an empty file
             try:
                 Path(config_path).touch()
-            except:
+            except Exception:
                 pass
 
     return config_path
@@ -166,7 +176,9 @@ def apply_config_overrides(config: Config, config_data: dict) -> None:
     if "youtube" in config_data:
         youtube = config_data["youtube"]
         if youtube.get("video_downloads_folder") is not None:
-            config.session.youtube.video_downloads_folder = youtube["video_downloads_folder"]
+            config.session.youtube.video_downloads_folder = youtube[
+                "video_downloads_folder"
+            ]
         if youtube.get("quality") is not None:
             config.session.youtube.quality = youtube["quality"]
         if youtube.get("download_videos") is not None:
@@ -180,15 +192,21 @@ def apply_config_overrides(config: Config, config_data: dict) -> None:
             config.session.downloads.folder = os.path.expanduser(downloads["folder"])
             print(f"Downloads folder set to: {config.session.downloads.folder}")
         if downloads.get("source_subdirectories") is not None:
-            config.session.downloads.source_subdirectories = downloads["source_subdirectories"]
+            config.session.downloads.source_subdirectories = downloads[
+                "source_subdirectories"
+            ]
         if downloads.get("disc_subdirectories") is not None:
-            config.session.downloads.disc_subdirectories = downloads["disc_subdirectories"]
+            config.session.downloads.disc_subdirectories = downloads[
+                "disc_subdirectories"
+            ]
         if downloads.get("concurrency") is not None:
             config.session.downloads.concurrency = downloads["concurrency"]
         if downloads.get("max_connections") is not None:
             config.session.downloads.max_connections = downloads["max_connections"]
         if downloads.get("requests_per_minute") is not None:
-            config.session.downloads.requests_per_minute = downloads["requests_per_minute"]
+            config.session.downloads.requests_per_minute = downloads[
+                "requests_per_minute"
+            ]
         if downloads.get("verify_ssl") is not None:
             config.session.downloads.verify_ssl = downloads["verify_ssl"]
 
@@ -208,22 +226,30 @@ def apply_config_overrides(config: Config, config_data: dict) -> None:
     if "metadata" in config_data:
         metadata = config_data["metadata"]
         if metadata.get("set_playlist_to_album") is not None:
-            config.session.metadata.set_playlist_to_album = metadata["set_playlist_to_album"]
+            config.session.metadata.set_playlist_to_album = metadata[
+                "set_playlist_to_album"
+            ]
         if metadata.get("renumber_playlist_tracks") is not None:
-            config.session.metadata.renumber_playlist_tracks = metadata["renumber_playlist_tracks"]
+            config.session.metadata.renumber_playlist_tracks = metadata[
+                "renumber_playlist_tracks"
+            ]
         if metadata.get("exclude") is not None:
             config.session.metadata.exclude = metadata["exclude"]
 
     if "filepaths" in config_data:
         filepaths = config_data["filepaths"]
         if filepaths.get("add_singles_to_folder") is not None:
-            config.session.filepaths.add_singles_to_folder = filepaths["add_singles_to_folder"]
+            config.session.filepaths.add_singles_to_folder = filepaths[
+                "add_singles_to_folder"
+            ]
         if filepaths.get("folder_format") is not None:
             config.session.filepaths.folder_format = filepaths["folder_format"]
         if filepaths.get("track_format") is not None:
             config.session.filepaths.track_format = filepaths["track_format"]
         if filepaths.get("restrict_characters") is not None:
-            config.session.filepaths.restrict_characters = filepaths["restrict_characters"]
+            config.session.filepaths.restrict_characters = filepaths[
+                "restrict_characters"
+            ]
         if filepaths.get("truncate_to") is not None:
             config.session.filepaths.truncate_to = filepaths["truncate_to"]
 
@@ -251,7 +277,9 @@ def apply_config_overrides(config: Config, config_data: dict) -> None:
         if qobuz_filters.get("features") is not None:
             config.session.qobuz_filters.features = qobuz_filters["features"]
         if qobuz_filters.get("non_studio_albums") is not None:
-            config.session.qobuz_filters.non_studio_albums = qobuz_filters["non_studio_albums"]
+            config.session.qobuz_filters.non_studio_albums = qobuz_filters[
+                "non_studio_albums"
+            ]
         if qobuz_filters.get("non_remaster") is not None:
             config.session.qobuz_filters.non_remaster = qobuz_filters["non_remaster"]
 
@@ -262,9 +290,13 @@ def apply_config_overrides(config: Config, config_data: dict) -> None:
         if database.get("downloads_path") is not None:
             config.session.database.downloads_path = database["downloads_path"]
         if database.get("failed_downloads_enabled") is not None:
-            config.session.database.failed_downloads_enabled = database["failed_downloads_enabled"]
+            config.session.database.failed_downloads_enabled = database[
+                "failed_downloads_enabled"
+            ]
         if database.get("failed_downloads_path") is not None:
-            config.session.database.failed_downloads_path = database["failed_downloads_path"]
+            config.session.database.failed_downloads_path = database[
+                "failed_downloads_path"
+            ]
 
     if "lastfm" in config_data:
         lastfm = config_data["lastfm"]
@@ -294,11 +326,17 @@ def apply_config_overrides(config: Config, config_data: dict) -> None:
 
     # Sync session changes to file config so downloads use the overridden values
     config.file.downloads.folder = config.session.downloads.folder
-    config.file.downloads.source_subdirectories = config.session.downloads.source_subdirectories
-    config.file.downloads.disc_subdirectories = config.session.downloads.disc_subdirectories
+    config.file.downloads.source_subdirectories = (
+        config.session.downloads.source_subdirectories
+    )
+    config.file.downloads.disc_subdirectories = (
+        config.session.downloads.disc_subdirectories
+    )
     config.file.downloads.concurrency = config.session.downloads.concurrency
     config.file.downloads.max_connections = config.session.downloads.max_connections
-    config.file.downloads.requests_per_minute = config.session.downloads.requests_per_minute
+    config.file.downloads.requests_per_minute = (
+        config.session.downloads.requests_per_minute
+    )
     config.file.downloads.verify_ssl = config.session.downloads.verify_ssl
 
     # Sync artwork settings

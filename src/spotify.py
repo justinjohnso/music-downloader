@@ -27,7 +27,9 @@ def extract_spotify_info(link: str) -> Tuple[str, str]:
     raise ValueError(f"Invalid Spotify link format: {link}")
 
 
-def get_spotify_tracks(spotify_link: str) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
+def get_spotify_tracks(
+    spotify_link: str,
+) -> Tuple[List[Dict[str, str]], Dict[str, Any]]:
     """
     Get track information from Spotify link.
 
@@ -53,7 +55,11 @@ def get_spotify_tracks(spotify_link: str) -> Tuple[List[Dict[str, str]], Dict[st
             "Get them from: https://developer.spotify.com/dashboard/"
         )
 
-    sp = spotipy.Spotify(auth_manager=SpotifyClientCredentials(client_id=client_id, client_secret=client_secret))
+    sp = spotipy.Spotify(
+        auth_manager=SpotifyClientCredentials(
+            client_id=client_id, client_secret=client_secret
+        )
+    )
 
     # Extract Spotify ID and type
     spotify_id, spotify_type = extract_spotify_info(spotify_link)
@@ -63,37 +69,45 @@ def get_spotify_tracks(spotify_link: str) -> Tuple[List[Dict[str, str]], Dict[st
     if spotify_type == "track":
         # Get single track
         track = sp.track(spotify_id)
-        artist = track['artists'][0]['name']
-        title = track['name']
+        artist = track["artists"][0]["name"]
+        title = track["name"]
         tracks.append({"artist": artist, "title": title})
-        return tracks, {'is_playlist': False, 'name': None}
+        return tracks, {"is_playlist": False, "name": None}
 
     elif spotify_type == "playlist":
         # Get playlist name
         playlist_info = sp.playlist(spotify_id)
-        playlist_name = playlist_info['name']
+        playlist_name = playlist_info["name"]
 
         # Get playlist tracks
-        results = sp.playlist_items(spotify_id, additional_types=['track'])
+        results = sp.playlist_items(spotify_id, additional_types=["track"])
 
-        for item in results['items']:
-            if 'track' in item and item['track']:
-                track = item['track']
-                artist = track['artists'][0]['name'] if track['artists'] else "Unknown Artist"
-                title = track['name']
+        for item in results["items"]:
+            if "track" in item and item["track"]:
+                track = item["track"]
+                artist = (
+                    track["artists"][0]["name"]
+                    if track["artists"]
+                    else "Unknown Artist"
+                )
+                title = track["name"]
                 tracks.append({"artist": artist, "title": title})
 
         # Handle playlists with more than 100 tracks (Spotify's pagination)
-        while results['next']:
+        while results["next"]:
             results = sp.next(results)
-            for item in results['items']:
-                if 'track' in item and item['track']:
-                    track = item['track']
-                    artist = track['artists'][0]['name'] if track['artists'] else "Unknown Artist"
-                    title = track['name']
+            for item in results["items"]:
+                if "track" in item and item["track"]:
+                    track = item["track"]
+                    artist = (
+                        track["artists"][0]["name"]
+                        if track["artists"]
+                        else "Unknown Artist"
+                    )
+                    title = track["name"]
                     tracks.append({"artist": artist, "title": title})
 
-        return tracks, {'is_playlist': True, 'name': playlist_name}
+        return tracks, {"is_playlist": True, "name": playlist_name}
 
     else:
         raise ValueError(f"Unsupported Spotify link type: {spotify_type}")
