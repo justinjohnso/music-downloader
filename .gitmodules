@@ -1,0 +1,3 @@
+[submodule "vendor/streamrip"]
+	path = vendor/streamrip
+	url = https://github.com/nathom/streamrip.git
