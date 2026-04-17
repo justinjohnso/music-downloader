@@ -20,16 +20,19 @@ def _get_spotify_app_client(client_id: str, client_secret: str) -> spotipy.Spoti
 
 def _get_spotify_user_client(client_id: str, client_secret: str) -> spotipy.Spotify:
     """User-authenticated Spotify client for playlist access."""
-    return spotipy.Spotify(
-        auth_manager=SpotifyOAuth(
-            client_id=client_id,
-            client_secret=client_secret,
-            redirect_uri="http://127.0.0.1:8888/callback",
-            scope="playlist-read-private playlist-read-collaborative",
-            open_browser=True,
-            cache_path=str(Path.home() / ".cache-music-downloader-spotify"),
-        )
+    cache_path = str(Path.home() / ".cache-music-downloader-spotify")
+
+    auth_manager = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri="http://127.0.0.1:8888/callback",
+        scope="playlist-read-private playlist-read-collaborative",
+        open_browser=True,
+        show_dialog=True,
+        cache_path=cache_path,
     )
+
+    return spotipy.Spotify(auth_manager=auth_manager)
 
 
 def is_spotify_link(link: str) -> bool:
@@ -92,8 +95,8 @@ def get_spotify_tracks(
         return tracks, {"is_playlist": False, "name": None}
 
     elif spotify_type == "playlist":
-        sp = _get_spotify_app_client(client_id, client_secret)
-        
+        sp = _get_spotify_user_client(client_id, client_secret)
+
         try:
             playlist_info = sp.playlist(spotify_id)
             playlist_name = playlist_info["name"]
@@ -138,9 +141,9 @@ def get_spotify_tracks(
             if "401" in msg or "Valid user authentication required" in msg:
                 raise RuntimeError(
                     "Spotify rejected this playlist request. "
-                    "Make sure your Spotify app has redirect URI "
-                    "'http://127.0.0.1:8888/callback' configured, "
-                    "then sign in when prompted."
+                    "The authenticated Spotify user may not have access to this playlist, "
+                    "or the OAuth token is stale. Try a playlist owned by the logged-in user "
+                    "or re-authenticate."
                 ) from e
             raise
 
