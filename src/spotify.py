@@ -73,6 +73,7 @@ def get_spotify_tracks(
     # Load configuration from mdl-config.toml file
     config_data = load_config()
 
+    # Set up Spotify client
     client_id = config_data.get("spotify", {}).get("client_id") or _DEFAULT_CLIENT_ID
     client_secret = config_data.get("spotify", {}).get("client_secret") or _DEFAULT_CLIENT_SECRET
 
@@ -91,8 +92,8 @@ def get_spotify_tracks(
         return tracks, {"is_playlist": False, "name": None}
 
     elif spotify_type == "playlist":
-        sp = _get_spotify_user_client(client_id, client_secret)
-
+        sp = _get_spotify_app_client(client_id, client_secret)
+        
         try:
             playlist_info = sp.playlist(spotify_id)
             playlist_name = playlist_info["name"]
@@ -113,6 +114,7 @@ def get_spotify_tracks(
                 title = track.get("name", "Unknown Title")
                 tracks.append({"artist": artist, "title": title})
 
+            # Handle playlists with more than 100 tracks (Spotify's pagination)
             while results["next"]:
                 results = sp.next(results)
 
