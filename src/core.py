@@ -469,7 +469,9 @@ def _resolve_duplicate_action(
         print(_warn("Invalid choice. Enter y or n."))
 
 
-def _offer_duplicate_review(duplicate_tracks: List[Dict[str, str]]) -> List[Dict[str, str]]:
+def _offer_duplicate_review(
+    duplicate_tracks: List[Dict[str, str]],
+) -> List[Dict[str, str]]:
     if not duplicate_tracks:
         return []
 
@@ -479,17 +481,11 @@ def _offer_duplicate_review(duplicate_tracks: List[Dict[str, str]]) -> List[Dict
         )
         return []
 
-    try:
-        response = input(
-            _action(
-                f"Skipped {len(duplicate_tracks)} duplicate track(s). Review [r] or continue [enter]: "
-            )
-        ).strip().lower()
-    except KeyboardInterrupt:
-        print(_warn("\nDuplicate review cancelled."))
-        return []
-    if response != "r":
-        return []
+    print(
+        _action(
+            f"Skipped {len(duplicate_tracks)} duplicate track(s). Opening review selector (q to continue)."
+        )
+    )
 
     if os.name == "posix":
         try:
@@ -505,22 +501,22 @@ def _offer_duplicate_review(duplicate_tracks: List[Dict[str, str]]) -> List[Dict
 
 
 def _offer_duplicate_review_arrow_mode(
-    duplicate_tracks: List[Dict[str, str]]
+    duplicate_tracks: List[Dict[str, str]],
 ) -> List[Dict[str, str]]:
     import curses
 
     selected_indices: set[int] = set()
     cursor_index = 0
-    status_line = "↑/↓ move • Enter/space/←/→ toggle • a all • d run selected • q quit"
+    controls_line = "↑/↓ move • Enter/space/←/→ toggle • a all • d download selected • q keep skipped"
 
     def _selector(stdscr):
-        nonlocal cursor_index, selected_indices, status_line
+        nonlocal cursor_index, selected_indices, controls_line
 
         if curses.has_colors():
             curses.start_color()
             curses.use_default_colors()
-            curses.init_pair(1, curses.COLOR_CYAN, -1)   # info/action
-            curses.init_pair(2, curses.COLOR_YELLOW, -1) # warning/highlighted labels
+            curses.init_pair(1, curses.COLOR_CYAN, -1)  # info/action
+            curses.init_pair(2, curses.COLOR_YELLOW, -1)  # warning/highlighted labels
             curses.init_pair(3, curses.COLOR_GREEN, -1)  # selected
 
         def _style(pair: int, bold: bool = False, reverse: bool = False) -> int:
@@ -540,12 +536,22 @@ def _offer_duplicate_review_arrow_mode(
             stdscr.addstr(
                 0,
                 0,
-                "Toggle duplicate tracks for re-download:"[: max(0, width - 1)],
+                "DUPLICATE REVIEW"[: max(0, width - 1)],
+                _style(2, bold=True),
+            )
+            stdscr.addstr(
+                1,
+                0,
+                f"{len(duplicate_tracks)} duplicate track(s) were skipped. Select any to re-download now."[
+                    : max(0, width - 1)
+                ],
                 _style(1, bold=True),
             )
-            stdscr.addstr(1, 0, status_line[: max(0, width - 1)], _style(1))
+            stdscr.addstr(2, 0, controls_line[: max(0, width - 1)], _style(1))
 
-            max_rows = max(0, height - 4)
+            list_start_row = 4
+            footer_rows = 2
+            max_rows = max(0, height - list_start_row - footer_rows)
             start_index = 0
             if cursor_index >= max_rows and max_rows > 0:
                 start_index = cursor_index - max_rows + 1
@@ -556,14 +562,41 @@ def _offer_duplicate_review_arrow_mode(
                 pointer = ">" if idx == cursor_index else " "
                 marker = "[x]" if idx in selected_indices else "[ ]"
                 line = f"{pointer} {marker} {idx + 1}. {track['label']}"
-                line_attr = _style(2 if idx == cursor_index else 1, bold=idx == cursor_index)
+                line_attr = _style(
+                    2 if idx == cursor_index else 1, bold=idx == cursor_index
+                )
                 if idx in selected_indices:
                     line_attr = _style(3, bold=True, reverse=(idx == cursor_index))
                 elif idx == cursor_index:
                     line_attr = _style(2, bold=True, reverse=True)
-                stdscr.addstr(row_offset + 2, 0, line[: max(0, width - 1)], line_attr)
+                stdscr.addstr(
+                    row_offset + list_start_row, 0, line[: max(0, width - 1)], line_attr
+                )
 
-            stdscr.addstr(height - 1, 0, "Selection: "[: max(0, width - 1)], _style(1, bold=True))
+            selected_count = len(selected_indices)
+            stdscr.addstr(
+                height - 2,
+                0,
+                f"Selected: {selected_count}/{len(duplicate_tracks)}"[
+                    : max(0, width - 1)
+                ],
+                _style(3 if selected_count > 0 else 1, bold=True),
+            )
+            action_parts = [
+                ("[D]", _style(3, bold=True)),
+                (" Download selected   ", _style(1)),
+                ("[Q]", _style(2, bold=True)),
+                (" Quit", _style(1)),
+            ]
+            x = 0
+            for text, attr in action_parts:
+                remaining = max(0, width - 1 - x)
+                if remaining <= 0:
+                    break
+                chunk = text[:remaining]
+                if chunk:
+                    stdscr.addstr(height - 1, x, chunk, attr)
+                    x += len(chunk)
             stdscr.refresh()
 
             key = stdscr.getch()
@@ -604,7 +637,7 @@ def _offer_duplicate_review_arrow_mode(
 
 
 def _offer_duplicate_review_line_mode(
-    duplicate_tracks: List[Dict[str, str]]
+    duplicate_tracks: List[Dict[str, str]],
 ) -> List[Dict[str, str]]:
     from rich.prompt import Prompt
 
@@ -624,7 +657,11 @@ def _offer_duplicate_review_line_mode(
             print(f"{pointer} {marker} {_info(str(idx) + '.')} {_ok(track['label'])}")
 
         try:
-            response = Prompt.ask("[bold cyan]Selection[/bold cyan]", default="").strip().lower()
+            response = (
+                Prompt.ask("[bold cyan]Selection[/bold cyan]", default="")
+                .strip()
+                .lower()
+            )
         except KeyboardInterrupt:
             print(_warn("\nDuplicate review cancelled."))
             return []
@@ -661,7 +698,11 @@ def _offer_duplicate_review_line_mode(
                 selected_indices.add(cursor_index)
             continue
 
-        print(_warn("Invalid selection. Use [n], [p], [t], [a], [d], [q] (quit), or Enter."))
+        print(
+            _warn(
+                "Invalid selection. Use [n], [p], [t], [a], [d], [q] (quit), or Enter."
+            )
+        )
 
 
 async def process_spotify_link(
