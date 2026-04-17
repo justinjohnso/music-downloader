@@ -10,7 +10,7 @@ if sys.platform == "win32":
 
 from .gui import launch_gui
 from .spotify import is_spotify_link
-from .core import process_spotify_link, download_track
+from .core import process_spotify_link, download_track, sync_downloads_db_from_library
 
 
 def main():
@@ -27,6 +27,13 @@ def main():
     parser.add_argument(
         "--setup", action="store_true", help="Run first-time setup wizard"
     )
+    parser.add_argument(
+        "--sync-db",
+        nargs="?",
+        const="",
+        metavar="PATH",
+        help="Sync downloads DB from configured downloads folder, or from PATH if provided.",
+    )
 
     args = parser.parse_args()
 
@@ -34,6 +41,16 @@ def main():
         from .config import run_setup_wizard
 
         run_setup_wizard()
+    elif args.sync_db is not None:
+        from .config import load_config
+
+        if not load_config():
+            print("No config found. Run 'mdl --setup' to configure.")
+            sys.exit(1)
+        sync_downloads_db_from_library(
+            library_path=(args.sync_db or None),
+            verbose=args.verbose,
+        )
     elif args.gui:
         launch_gui()
     elif args.input:
