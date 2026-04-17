@@ -1,11 +1,38 @@
 import base64
 from typing import List, Dict, Tuple, Any
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials
+from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
+from pathlib import Path
 
 # Pre-configured default Spotify credentials (base64 obfuscated)
 _DEFAULT_CLIENT_ID = base64.b64decode(b"ZDczNzQ4YjdjZjU1NGJjNjg3NWQ2MmYyZmJhZmM5M2I=").decode()
 _DEFAULT_CLIENT_SECRET = base64.b64decode(b"MTc0YjRhOWMxNTMzNDU1M2I3NjhjMDViZDQwMTBmNGE=").decode()
+
+def _get_spotify_app_client(client_id: str, client_secret: str) -> spotipy.Spotify:
+    """App-only Spotify client for simple public metadata lookups."""
+    return spotipy.Spotify(
+        auth_manager=SpotifyClientCredentials(
+            client_id=client_id,
+            client_secret=client_secret,
+        )
+    )
+
+
+def _get_spotify_user_client(client_id: str, client_secret: str) -> spotipy.Spotify:
+    """User-authenticated Spotify client for playlist access."""
+    cache_path = str(Path.home() / ".cache-music-downloader-spotify")
+
+    auth_manager = SpotifyOAuth(
+        client_id=client_id,
+        client_secret=client_secret,
+        redirect_uri="http://127.0.0.1:8888/callback",
+        scope="playlist-read-private playlist-read-collaborative",
+        open_browser=True,
+        show_dialog=True,
+        cache_path=cache_path,
+    )
+
+    return spotipy.Spotify(auth_manager=auth_manager)
 
 
 def is_spotify_link(link: str) -> bool:
@@ -53,19 +80,14 @@ def get_spotify_tracks(
     client_id = config_data.get("spotify", {}).get("client_id") or _DEFAULT_CLIENT_ID
     client_secret = config_data.get("spotify", {}).get("client_secret") or _DEFAULT_CLIENT_SECRET
 
-    sp = spotipy.Spotify(
-        auth_manager=SpotifyClientCredentials(
-            client_id=client_id, client_secret=client_secret
-        )
-    )
-
     # Extract Spotify ID and type
     spotify_id, spotify_type = extract_spotify_info(spotify_link)
 
     tracks = []
 
     if spotify_type == "track":
-        # Get single track
+        sp = _get_spotify_app_client(client_id, client_secret)
+
         track = sp.track(spotify_id)
         artist = track["artists"][0]["name"]
         title = track["name"]
@@ -73,39 +95,57 @@ def get_spotify_tracks(
         return tracks, {"is_playlist": False, "name": None}
 
     elif spotify_type == "playlist":
-        # Get playlist name
-        playlist_info = sp.playlist(spotify_id)
-        playlist_name = playlist_info["name"]
+        sp = _get_spotify_user_client(client_id, client_secret)
 
-        # Get playlist tracks
-        results = sp.playlist_items(spotify_id, additional_types=["track"])
+        try:
+            playlist_info = sp.playlist(spotify_id)
+            playlist_name = playlist_info["name"]
 
-        for item in results["items"]:
-            if "track" in item and item["track"]:
-                track = item["track"]
+            # Get playlist tracks
+            results = sp.playlist_items(spotify_id, additional_types=["track"])
+
+            for item in results["items"]:
+                track = item.get("track") or item.get("item")
+                if not track or track.get("type") != "track":
+                    continue
+
                 artist = (
                     track["artists"][0]["name"]
-                    if track["artists"]
+                    if track.get("artists")
                     else "Unknown Artist"
                 )
-                title = track["name"]
+                title = track.get("name", "Unknown Title")
                 tracks.append({"artist": artist, "title": title})
 
-        # Handle playlists with more than 100 tracks (Spotify's pagination)
-        while results["next"]:
-            results = sp.next(results)
-            for item in results["items"]:
-                if "track" in item and item["track"]:
-                    track = item["track"]
+            # Handle playlists with more than 100 tracks (Spotify's pagination)
+            while results["next"]:
+                results = sp.next(results)
+
+                for item in results["items"]:
+                    track = item.get("track") or item.get("item")
+                    if not track or track.get("type") != "track":
+                        continue
+
                     artist = (
                         track["artists"][0]["name"]
-                        if track["artists"]
+                        if track.get("artists")
                         else "Unknown Artist"
                     )
-                    title = track["name"]
+                    title = track.get("name", "Unknown Title")
                     tracks.append({"artist": artist, "title": title})
 
-        return tracks, {"is_playlist": True, "name": playlist_name}
+            return tracks, {"is_playlist": True, "name": playlist_name}
+
+        except Exception as e:
+            msg = str(e)
+            if "401" in msg or "Valid user authentication required" in msg:
+                raise RuntimeError(
+                    "Spotify rejected this playlist request. "
+                    "The authenticated Spotify user may not have access to this playlist, "
+                    "or the OAuth token is stale. Try a playlist owned by the logged-in user "
+                    "or re-authenticate."
+                ) from e
+            raise
 
     else:
         raise ValueError(f"Unsupported Spotify link type: {spotify_type}")

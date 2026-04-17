@@ -106,6 +106,13 @@ async def download_track_with_client(
             # Resolve and download the track
             print(f"Downloading '{title}' by {artist}...")
             resolved = await pending.resolve()
+
+            if resolved is None:
+                print(
+                    "Error downloading track: Download unavailable, nothing found."
+                )
+                return None
+
             await resolved.rip()
             print(f"Successfully downloaded '{title}' by {artist}")
             # Return the expected file path (though we don't have it exactly)

@@ -220,7 +220,21 @@ def _apply_to_session(session, config_data: dict) -> None:
     if "deezer" in config_data:
         deezer = config_data["deezer"]
         if deezer.get("arl") is not None: session.deezer.arl = deezer["arl"]
-        if deezer.get("quality") is not None: session.deezer.quality = deezer["quality"]
+        if deezer.get("quality") is not None:
+            mdl_quality = int(deezer["quality"])
+            # MDL quality choices:
+            # 1 = 320kbps MP3
+            # 2 = FLAC
+            #
+            # Streamrip/Deezer uses its own internal quality enum.
+            # Map MDL values explicitly instead of passing them through directly.
+            if mdl_quality == 1:
+                session.deezer.quality = 0
+            elif mdl_quality == 2:
+                session.deezer.quality = 2
+            else:
+                session.deezer.quality = 0
+
         if deezer.get("use_deezloader") is not None: session.deezer.use_deezloader = deezer["use_deezloader"]
         if deezer.get("deezloader_warnings") is not None: session.deezer.deezloader_warnings = deezer["deezloader_warnings"]
 
@@ -399,7 +413,7 @@ def run_setup_wizard() -> None:
 
         # 1. Deezer ARL
         console.print("\n[bold]Step 1: Deezer ARL[/bold] [red](required)[/red]")
-        console.print("[dim]Your ARL is a cookie used to authenticate with Deezer.[/dim]")
+        console.print("[dim]Your ARL is a cookie used to authenticate with Deezer. You need to create a Deezer account and login for this.[/dim]")
         console.print("[dim]Find it here:[/dim] [link=https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie]streamrip wiki[/link]\n")
         
         arl = ""
@@ -435,8 +449,8 @@ def run_setup_wizard() -> None:
         quality = int(quality_str)
 
         # 4. Spotify
-        console.print("\n[bold]Step 4: Spotify Credentials[/bold] [dim](optional)[/dim]")
-        console.print("[dim]MDL has built-in defaults, but you can provide your own.[/dim]")
+        console.print("\n[bold]Step 4: Spotify Dev App Credentials[/bold] [dim](optional)[/dim]")
+        console.print("[dim]MDL has built-in defaults, but you can provide your own via https://developer.spotify.com/ .[/dim]")
         
         spotify_id = default_spotify_id
         spotify_secret = default_spotify_secret
