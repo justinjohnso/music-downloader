@@ -79,7 +79,9 @@ def _apply_progress_color_scheme() -> None:
                     console=sr_progress.console,
                 )
                 self.task_titles = []
-                self.prefix = Text.assemble(("Downloading ", "bold cyan"), overflow="ellipsis")
+                self.prefix = Text.assemble(
+                    ("Downloading ", "bold cyan"), overflow="ellipsis"
+                )
                 self._text_cache = self.gen_title_text()
                 self.live = Live(
                     Group(self._text_cache, self.progress),
@@ -663,7 +665,9 @@ def run_setup_wizard() -> None:
 
         # 2. Download folder
         console.print("\n[bold]Step 2: Download Folder[/bold]")
-        folder = Prompt.ask("[cyan]Download folder[/cyan]", default=default_folder).strip()
+        folder = Prompt.ask(
+            "[cyan]Download folder[/cyan]", default=default_folder
+        ).strip()
 
         # 3. Quality
         console.print("\n[bold]Step 3: Audio Quality[/bold]")
