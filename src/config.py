@@ -362,6 +362,10 @@ def _apply_to_session(session, config_data: dict) -> None:
             else:
                 session.deezer.quality = 0
 
+        if deezer.get("lower_quality_if_not_available") is not None:
+            session.deezer.lower_quality_if_not_available = deezer[
+                "lower_quality_if_not_available"
+            ]
         if deezer.get("use_deezloader") is not None:
             session.deezer.use_deezloader = deezer["use_deezloader"]
         if deezer.get("deezloader_warnings") is not None:
@@ -672,10 +676,16 @@ def ensure_mdl_config_complete() -> None:
     changed: list[str] = []
 
     # Special case: rename [conversions] → [conversion]
+    # Build a fresh table to avoid tomlkit preserving the old key name in trivia
     if "conversions" in user_doc and "conversion" not in user_doc:
-        old_table = user_doc.item("conversions")
+        import copy as _copy
+
+        old_table = user_doc["conversions"]
+        new_table = tomlkit.table()
+        for k, v in old_table.items():
+            new_table.add(k, _copy.deepcopy(v))
         user_doc.remove("conversions")
-        user_doc.add("conversion", old_table)
+        user_doc.add("conversion", new_table)
         changed.append("[conversions]→[conversion]")
         _log.info(
             "mdl: renamed legacy [conversions] section to [conversion] in %s",
