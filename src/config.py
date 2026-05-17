@@ -294,8 +294,9 @@ def merge_mdl_config_into_streamrip(
         "lastfm",
         "cli",
         "misc",
+        "conversion",
+        "qobuz_filters",
     }
-    SPECIAL_MAPPINGS = {"conversions": "conversion"}
 
     with open(streamrip_config_path, "r", encoding="utf-8") as f:
         sr_config = tomlkit.parse(f.read())
@@ -303,8 +304,6 @@ def merge_mdl_config_into_streamrip(
     for mdl_section, mdl_values in mdl_config_data.items():
         if mdl_section in MERGE_SECTIONS:
             sr_section = mdl_section
-        elif mdl_section in SPECIAL_MAPPINGS:
-            sr_section = SPECIAL_MAPPINGS[mdl_section]
         else:
             continue
 
@@ -474,18 +473,18 @@ def _apply_to_session(session, config_data: dict) -> None:
         if filepaths.get("truncate_to") is not None:
             session.filepaths.truncate_to = filepaths["truncate_to"]
 
-    if "conversions" in config_data:
-        conversions = config_data["conversions"]
-        if conversions.get("enabled") is not None:
-            session.conversion.enabled = conversions["enabled"]
-        if conversions.get("codec") is not None:
-            session.conversion.codec = conversions["codec"]
-        if conversions.get("sampling_rate") is not None:
-            session.conversion.sampling_rate = conversions["sampling_rate"]
-        if conversions.get("bit_depth") is not None:
-            session.conversion.bit_depth = conversions["bit_depth"]
-        if conversions.get("lossy_bitrate") is not None:
-            session.conversion.lossy_bitrate = conversions["lossy_bitrate"]
+    if "conversion" in config_data:
+        conversion = config_data["conversion"]
+        if conversion.get("enabled") is not None:
+            session.conversion.enabled = conversion["enabled"]
+        if conversion.get("codec") is not None:
+            session.conversion.codec = conversion["codec"]
+        if conversion.get("sampling_rate") is not None:
+            session.conversion.sampling_rate = conversion["sampling_rate"]
+        if conversion.get("bit_depth") is not None:
+            session.conversion.bit_depth = conversion["bit_depth"]
+        if conversion.get("lossy_bitrate") is not None:
+            session.conversion.lossy_bitrate = conversion["lossy_bitrate"]
 
     if "qobuz_filters" in config_data:
         qobuz_filters = config_data["qobuz_filters"]
