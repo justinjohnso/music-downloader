@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Literal, Tuple
 from streamrip.client import DeezerClient
 from streamrip.config import Config
 from streamrip.db import Database, Downloads, Failed, Dummy
+from streamrip.exceptions import AuthenticationError, MissingCredentialsError
 from streamrip.media import PendingTrack
 from streamrip.metadata import AlbumMetadata
 from streamrip.media.artwork import download_artwork
@@ -186,9 +187,13 @@ async def download_multiple_tracks(
     db = _build_database_from_config(config)
 
     try:
-        await client.login()
-        if not getattr(client, "logged_in", False):
-            print("Login failed. Check your Deezer credentials in the config file.")
+        try:
+            await client.login()
+        except AuthenticationError:
+            print("Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it.")
+            return
+        except MissingCredentialsError:
+            print("No Deezer ARL configured. Run 'mdl --setup' to add one.")
             return
         print("Logged in to Deezer.")
 
@@ -359,9 +364,13 @@ async def download_track(
     client = DeezerClient(config)
 
     try:
-        await client.login()
-        if not getattr(client, "logged_in", False):
-            print("Login failed. Check your Deezer credentials in the config file.")
+        try:
+            await client.login()
+        except AuthenticationError:
+            print("Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it.")
+            return
+        except MissingCredentialsError:
+            print("No Deezer ARL configured. Run 'mdl --setup' to add one.")
             return
         print("Logged in to Deezer.")
 
@@ -740,7 +749,8 @@ async def process_spotify_link(
         )
 
     except Exception as e:
-        print(f"Error processing Spotify link: {e}")
+        msg = str(e) or type(e).__name__
+        print(f"Error processing Spotify link: {msg}")
 
 
 def sync_downloads_db_from_library(
@@ -779,9 +789,13 @@ def sync_downloads_db_from_library(
     async def _sync_impl():
         client = DeezerClient(config)
         try:
-            await client.login()
-            if not getattr(client, "logged_in", False):
-                print(_warn("Login failed. Cannot sync IDs from Deezer."))
+            try:
+                await client.login()
+            except AuthenticationError:
+                print("Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it.")
+                return
+            except MissingCredentialsError:
+                print("No Deezer ARL configured. Run 'mdl --setup' to add one.")
                 return
 
             synced_count = 0

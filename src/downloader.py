@@ -34,6 +34,13 @@ def main():
         metavar="PATH",
         help="Sync downloads DB from configured downloads folder, or from PATH if provided.",
     )
+    parser.add_argument(
+        "--set-arl",
+        nargs="?",
+        const="",
+        default=None,
+        help="Update the Deezer ARL. Prompts interactively if no value provided.",
+    )
 
     args = parser.parse_args()
 
@@ -41,6 +48,13 @@ def main():
         from .config import run_setup_wizard
 
         run_setup_wizard()
+    elif args.set_arl is not None:
+        # Skip ensure_mdl_config_complete: set-arl may be run precisely to fix
+        # a credential problem that auto-repair can't resolve.
+        from .config import set_arl
+
+        set_arl(args.set_arl or None, verbose=args.verbose)
+        return
     elif args.sync_db is not None:
         from .config import load_config, ensure_mdl_config_complete
 

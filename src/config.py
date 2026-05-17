@@ -563,9 +563,14 @@ def _get_mdl_config_path() -> Path:
     return _get_mdl_config_dir() / "mdl-config.toml"
 
 
-def _validate_deezer_arl(arl: str) -> bool:
+def _validate_deezer_arl(arl: str, verbose: bool = False):
+    """Validate ARL by attempting a live Deezer login.
+
+    Returns bool when verbose=False, tuple[bool, str | None] when verbose=True.
+    """
     import asyncio
 
+    exc_detail: str | None = None
     try:
         from streamrip.client import DeezerClient
         from streamrip.config import Config
@@ -579,9 +584,82 @@ def _validate_deezer_arl(arl: str) -> bool:
             await client.login()
             return getattr(client, "logged_in", False)
 
-        return asyncio.run(_try_login())
-    except Exception:
+        result = asyncio.run(_try_login())
+        if verbose:
+            return result, None
+        return result
+    except Exception as exc:
+        exc_detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+        if verbose:
+            return False, exc_detail
         return False
+
+
+def set_arl(arl: str | None = None, *, verbose: bool = False) -> None:
+    """Update the Deezer ARL in mdl-config and streamrip's config.toml.
+
+    Validates via live login before persisting. Exits 1 on failure.
+    """
+    from rich.console import Console
+    from rich.prompt import Prompt
+
+    console = Console()
+
+    config_data, config_path_str = load_config_with_path()
+    if not config_path_str:
+        print("No mdl config found. Run 'mdl --setup' first.")
+        sys.exit(1)
+
+    config_path = Path(config_path_str)
+
+    if not arl:
+        default_arl = config_data.get("deezer", {}).get("arl", "")
+        console.print("\n[bold]Update Deezer ARL[/bold]")
+        console.print(
+            "[dim]Find your ARL here:[/dim] "
+            "[link=https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie]streamrip wiki[/link]\n"
+        )
+        while not arl:
+            arl = Prompt.ask(
+                "[cyan]Paste your Deezer ARL[/cyan]",
+                default=default_arl,
+                password=True,
+            ).strip()
+            if not arl:
+                console.print("[red]ARL is required.[/red]")
+
+    console.print("[dim]Validating ARL...[/dim]")
+
+    if verbose:
+        valid, exc_detail = _validate_deezer_arl(arl, verbose=True)  # type: ignore[misc]
+    else:
+        valid = _validate_deezer_arl(arl)
+        exc_detail = None
+
+    if not valid:
+        console.print("[bold red]✗ ARL validation failed. Not saving.[/bold red]")
+        if verbose and exc_detail:
+            console.print(f"[dim red]{exc_detail}[/dim red]")
+        sys.exit(1)
+
+    # Preserve all existing config values, only override arl
+    prompted = {
+        "arl": arl,
+        "quality": config_data.get("deezer", {}).get("quality", 1),
+        "folder": config_data.get("downloads", {}).get("folder", "~/Music/Music Downloader"),
+        "spotify_id": config_data.get("spotify", {}).get("client_id", ""),
+        "spotify_secret": config_data.get("spotify", {}).get("client_secret", ""),
+    }
+
+    _write_or_update_config(config_path, prompted)
+
+    sr_path = ensure_streamrip_config_exists()
+    merge_mdl_config_into_streamrip(
+        sr_path,
+        tomlkit.parse(config_path.read_text(encoding="utf-8")),
+    )
+
+    console.print(f"[bold green]✓ ARL refreshed. Updated {config_path}[/bold green]")
 
 
 def _build_config_toml(
@@ -901,7 +979,9 @@ def run_setup_wizard() -> None:
         arl = ""
         while not arl:
             arl = Prompt.ask(
-                "[cyan]Paste your Deezer ARL[/cyan]", default=default_arl
+                "[cyan]Paste your Deezer ARL[/cyan]",
+                default=default_arl,
+                password=True,
             ).strip()
             if not arl:
                 console.print("[red]ARL is required.[/red]")
