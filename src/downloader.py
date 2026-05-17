@@ -42,11 +42,12 @@ def main():
 
         run_setup_wizard()
     elif args.sync_db is not None:
-        from .config import load_config
+        from .config import load_config, ensure_mdl_config_complete
 
         if not load_config():
             print("No config found. Run 'mdl --setup' to configure.")
             sys.exit(1)
+        ensure_mdl_config_complete()
         sync_downloads_db_from_library(
             library_path=(args.sync_db or None),
             verbose=args.verbose,
@@ -55,11 +56,12 @@ def main():
         launch_gui()
     elif args.input:
         # Check if config exists before attempting a download
-        from .config import load_config
+        from .config import load_config, ensure_mdl_config_complete
 
         if not load_config():
             print("No config found. Run 'mdl --setup' to configure.")
             sys.exit(1)
+        ensure_mdl_config_complete()
 
         if is_spotify_link(args.input):
             # Handle Spotify link
@@ -79,11 +81,12 @@ def main():
                 print("\nOperation cancelled by user.")
     else:
         # No input and no flags — check if config exists
-        from .config import load_config
+        from .config import load_config, ensure_mdl_config_complete
 
         if not load_config():
             print("No config found. Run 'mdl --setup' to get started.")
             sys.exit(1)
+        ensure_mdl_config_complete()
         parser.print_help()
 
 

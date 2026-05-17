@@ -647,6 +647,100 @@ def _build_config_toml(
     return banner + content
 
 
+def ensure_mdl_config_complete() -> None:
+    """On every startup: fill missing keys, fix empty db paths, rename legacy sections."""
+    import copy
+    from src.schema import STREAMRIP_DEFAULTS
+
+    config_data, config_path_str = load_config_with_path()
+    if not config_path_str:
+        # No config yet — setup wizard handles that
+        return
+
+    config_path = Path(config_path_str)
+
+    # Legacy-path nudge (non-blocking)
+    modern_path = _get_mdl_config_path()
+    legacy_home = Path.home() / "mdl-config.toml"
+    if config_path == legacy_home:
+        _log.info(
+            "mdl: legacy config detected at %s — run 'mdl --setup' to migrate to %s",
+            config_path,
+            modern_path,
+        )
+
+    user_doc = tomlkit.parse(config_path.read_text(encoding="utf-8"))
+    changed: list[str] = []
+
+    # Special case: rename [conversions] → [conversion]
+    if "conversions" in user_doc and "conversion" not in user_doc:
+        old_table = user_doc.item("conversions")
+        user_doc.remove("conversions")
+        user_doc.add("conversion", old_table)
+        changed.append("[conversions]→[conversion]")
+        _log.info(
+            "mdl: renamed legacy [conversions] section to [conversion] in %s",
+            config_path,
+        )
+
+    db_path, failed_db_path = _default_database_paths()
+    must_fill = {
+        ("database", "downloads_path"): db_path,
+        ("database", "failed_downloads_path"): failed_db_path,
+    }
+
+    for section, default_values in copy.deepcopy(STREAMRIP_DEFAULTS).items():
+        if not isinstance(default_values, dict):
+            continue
+        if section not in user_doc:
+            user_doc.add(section, default_values)
+            changed.append(section)
+            if section == "lastfm":
+                user_doc["lastfm"]["source"] = "deezer"
+            # Fill must-fill keys that came in as empty defaults
+            for k, fill_val in must_fill.items():
+                if k[0] == section and not user_doc[section].get(k[1]):
+                    user_doc[section][k[1]] = fill_val
+                    parent = Path(fill_val).parent
+                    try:
+                        parent.mkdir(parents=True, exist_ok=True)
+                    except Exception:
+                        pass
+        else:
+            for key, default_val in default_values.items():
+                k = (section, key)
+                if key not in user_doc[section]:
+                    user_doc[section].add(key, default_val)
+                    changed.append(f"{section}.{key}")
+                    if k in must_fill and not default_val:
+                        user_doc[section][key] = must_fill[k]
+                        parent = Path(must_fill[k]).parent
+                        try:
+                            parent.mkdir(parents=True, exist_ok=True)
+                        except Exception:
+                            pass
+                elif k in must_fill and not user_doc[section][key]:
+                    user_doc[section][key] = must_fill[k]
+                    parent = Path(must_fill[k]).parent
+                    try:
+                        parent.mkdir(parents=True, exist_ok=True)
+                    except Exception:
+                        pass
+                    changed.append(f"{section}.{key}")
+
+    # Ensure [spotify] section exists
+    if "spotify" not in user_doc:
+        spotify_table = tomlkit.table()
+        spotify_table.add(tomlkit.comment("client_id = \"\""))
+        spotify_table.add(tomlkit.comment("client_secret = \"\""))
+        user_doc.add("spotify", spotify_table)
+        changed.append("spotify")
+
+    if changed:
+        _secure_write(config_path, tomlkit.dumps(user_doc))
+        _log.info("mdl: filled in missing config keys: %s", ", ".join(changed))
+
+
 def _write_or_update_config(
     path: Path,
     prompted: dict,
