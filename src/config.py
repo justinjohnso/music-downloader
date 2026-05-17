@@ -582,32 +582,69 @@ def _validate_deezer_arl(arl: str) -> bool:
 
 
 def _build_config_toml(
-    arl: str, quality: int, folder: str, spotify_id: str = "", spotify_secret: str = ""
+    arl: str,
+    quality: int,
+    folder: str,
+    spotify_id: str = "",
+    spotify_secret: str = "",
+    advanced: dict | None = None,
 ) -> str:
-    lines = [
-        "# Music Downloader Configuration",
-        "# Edit this file or run 'mdl --setup' to reconfigure.",
-        "",
-        "[deezer]",
-        f'arl = "{arl}"',
-        f"quality = {quality}",
-        "",
-        "[downloads]",
-        f'folder = "{folder}"',
-        "",
-        "[filepaths]",
-        'track_format = "{artist} - {title}{explicit}"',
-    ]
-    if spotify_id and spotify_secret:
-        lines.extend(
-            [
-                "",
-                "[spotify]",
-                f'client_id = "{spotify_id}"',
-                f'client_secret = "{spotify_secret}"',
-            ]
+    import copy
+    from src.schema import STREAMRIP_DEFAULTS
+
+    doc = copy.deepcopy(STREAMRIP_DEFAULTS)
+
+    # Required overrides
+    doc["deezer"]["arl"] = arl
+    doc["deezer"]["quality"] = quality
+    doc["downloads"]["folder"] = os.path.expanduser(folder)
+
+    db_path, failed_db_path = _default_database_paths()
+    doc["database"]["downloads_path"] = db_path
+    doc["database"]["failed_downloads_path"] = failed_db_path
+
+    # Override lastfm source (design decision #5)
+    doc["lastfm"]["source"] = "deezer"
+    # Add inline comment for the override — tomlkit item-level comment
+    try:
+        doc["lastfm"]["source"].comment(
+            'overridden from streamrip default ("qobuz") since mdl is Deezer-primary'
         )
-    return "\n".join(lines) + "\n"
+    except Exception:
+        pass
+
+    # Apply advanced overrides
+    if advanced:
+        for section, keys in advanced.items():
+            if isinstance(keys, dict):
+                if section not in doc:
+                    doc.add(section, tomlkit.table())
+                for k, v in keys.items():
+                    doc[section][k] = v
+            else:
+                doc[section] = keys
+
+    # Append [spotify] section
+    spotify_table = tomlkit.table()
+    if spotify_id:
+        spotify_table.add("client_id", spotify_id)
+    else:
+        spotify_table.add(tomlkit.comment("client_id = \"\""))
+    if spotify_secret:
+        spotify_table.add("client_secret", spotify_secret)
+    else:
+        spotify_table.add(tomlkit.comment("client_secret = \"\""))
+    doc.add("spotify", spotify_table)
+
+    content = tomlkit.dumps(doc)
+
+    # Prepend banner (design decision #7)
+    banner = (
+        "# mdl — music-downloader config\n"
+        "# Contains credentials (Deezer ARL, Spotify client_secret). Do not share.\n"
+        "# Edit this file directly or run 'mdl --setup' to reconfigure.\n"
+    )
+    return banner + content
 
 
 def run_setup_wizard() -> None:
