@@ -741,3 +741,131 @@ async def process_spotify_link(
 
     except Exception as e:
         print(f"Error processing Spotify link: {e}")
+
+
+def sync_downloads_db_from_library(
+    library_path: Optional[str] = None, verbose: bool = False
+) -> None:
+    """
+    Sync downloads DB by scanning the configured library folder for media files.
+    This reads the tags from local files, searches Deezer for matching tracks,
+    and populates the streamrip downloads database to prevent duplicates.
+    """
+    from src.config import (
+        load_config_with_path,
+        ensure_streamrip_config_exists,
+        apply_config_overrides,
+    )
+    import os
+    import asyncio
+    from mutagen import File
+
+    config_data, _ = load_config_with_path(verbose=verbose)
+    config_path = ensure_streamrip_config_exists()
+
+    config = Config(config_path)
+    apply_config_overrides(config, config_data)
+
+    db = _build_database_from_config(config)
+
+    target_path = library_path or config.file.downloads.folder
+
+    if not target_path or not os.path.exists(target_path):
+        print(_warn(f"Library path does not exist: {target_path}"))
+        return
+
+    print(_info(f"Scanning library at '{target_path}' for media files..."))
+
+    async def _sync_impl():
+        client = DeezerClient(config)
+        try:
+            await client.login()
+            if not getattr(client, "logged_in", False):
+                print(_warn("Login failed. Cannot sync IDs from Deezer."))
+                return
+
+            synced_count = 0
+            skipped_count = 0
+            files_to_process = []
+
+            for root, _, files in os.walk(target_path):
+                for file in files:
+                    if file.endswith((".flac", ".mp3", ".m4a", ".ogg")):
+                        files_to_process.append(os.path.join(root, file))
+
+            print(
+                f"Found {len(files_to_process)} media files. This may take a while..."
+            )
+
+            for filepath in files_to_process:
+                try:
+                    audio = File(filepath, easy=True)
+                    if not audio:
+                        continue
+
+                    title = audio.get("title", [None])[0]
+                    artist = audio.get("artist", [None])[0]
+                    isrc = audio.get("isrc", [None])[0]
+
+                    if not title or not artist:
+                        continue
+
+                    search_query = (
+                        f"isrc:{isrc}" if isrc else f'artist:"{artist}" track:"{title}"'
+                    )
+
+                    if verbose:
+                        print(f"Searching Deezer for: {search_query}")
+
+                    results = await client.search(
+                        query=search_query, media_type="track"
+                    )
+                    tracks = (
+                        results.get("data", [])
+                        if isinstance(results, dict)
+                        else results
+                    )
+
+                    if tracks:
+                        track = (
+                            tracks[0].get("data", [tracks[0]])[0]
+                            if "data" in tracks[0]
+                            else tracks[0]
+                        )
+                        track_id = track.get("id")
+
+                        if track_id:
+                            if not db.downloaded(str(track_id)):
+                                db.set_downloaded(str(track_id))
+                                synced_count += 1
+                                if verbose:
+                                    print(
+                                        _ok(
+                                            f"Added ID {track_id} for '{title}' by '{artist}'"
+                                        )
+                                    )
+                            else:
+                                skipped_count += 1
+                                if verbose:
+                                    print(f"ID {track_id} already in DB for '{title}'.")
+                except Exception as e:
+                    if verbose:
+                        print(_warn(f"Error processing {filepath}: {e}"))
+
+                # Rate limit safety
+                await asyncio.sleep(0.5)
+
+            print(
+                _info(
+                    f"\nSync complete: {synced_count} new tracks added to DB ({skipped_count} already existed)."
+                )
+            )
+        finally:
+            if (
+                hasattr(client, "session")
+                and client.session
+                and not client.session.closed
+            ):
+                await client.session.close()
+
+    asyncio.run(_sync_impl())
