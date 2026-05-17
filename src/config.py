@@ -852,6 +852,97 @@ def run_setup_wizard() -> None:
                 password=True,
             ).strip()
 
+        # 5. Advanced options
+        advanced: dict | None = None
+        if Confirm.ask(
+            "\n[cyan]Configure advanced options now?[/cyan] "
+            "[dim]You can always edit the config file later.[/dim]",
+            default=False,
+        ):
+            from src.schema import STREAMRIP_DEFAULTS
+
+            advanced = {}
+
+            console.print("\n[bold]Advanced: Downloads[/bold]")
+            _def_conc = str(STREAMRIP_DEFAULTS["downloads"]["concurrency"]).lower()
+            conc_str = Prompt.ask(
+                "[cyan]Enable concurrency (true/false)[/cyan]",
+                default=_def_conc,
+            ).strip().lower()
+            if conc_str:
+                advanced.setdefault("downloads", {})["concurrency"] = conc_str == "true"
+
+            _def_mc = str(STREAMRIP_DEFAULTS["downloads"]["max_connections"])
+            mc_str = Prompt.ask(
+                "[cyan]Max connections[/cyan]", default=_def_mc
+            ).strip()
+            if mc_str:
+                try:
+                    advanced.setdefault("downloads", {})["max_connections"] = int(mc_str)
+                except ValueError:
+                    pass
+
+            console.print("\n[bold]Advanced: Qobuz[/bold]")
+            use_token_str = Prompt.ask(
+                "[cyan]Use auth token for Qobuz? (true/false, blank=skip)[/cyan]",
+                default="",
+            ).strip().lower()
+            if use_token_str in ("true", "false"):
+                advanced.setdefault("qobuz", {})["use_auth_token"] = use_token_str == "true"
+                qobuz_email = Prompt.ask(
+                    "[cyan]Qobuz email or user ID (blank=skip)[/cyan]", default=""
+                ).strip()
+                if qobuz_email:
+                    advanced.setdefault("qobuz", {})["email_or_userid"] = qobuz_email
+                qobuz_pass = Prompt.ask(
+                    "[cyan]Qobuz password or token (blank=skip)[/cyan]",
+                    default="",
+                    password=True,
+                ).strip()
+                if qobuz_pass:
+                    advanced.setdefault("qobuz", {})["password_or_token"] = qobuz_pass
+
+            console.print("\n[bold]Advanced: Tidal[/bold]")
+            console.print(
+                "[dim]Hint: full Tidal OAuth login requires `rip config --tidal` after install.[/dim]"
+            )
+            tidal_user_id = Prompt.ask(
+                "[cyan]Tidal user ID (blank=skip)[/cyan]", default=""
+            ).strip()
+            if tidal_user_id:
+                advanced.setdefault("tidal", {})["user_id"] = tidal_user_id
+            tidal_token = Prompt.ask(
+                "[cyan]Tidal access token (blank=skip)[/cyan]", default=""
+            ).strip()
+            if tidal_token:
+                advanced.setdefault("tidal", {})["access_token"] = tidal_token
+
+            console.print("\n[bold]Advanced: Conversion[/bold]")
+            conv_enabled_str = Prompt.ask(
+                "[cyan]Enable audio conversion? (true/false)[/cyan]", default="false"
+            ).strip().lower()
+            if conv_enabled_str in ("true", "false"):
+                conv_enabled = conv_enabled_str == "true"
+                advanced.setdefault("conversion", {})["enabled"] = conv_enabled
+                if conv_enabled:
+                    codec = Prompt.ask(
+                        "[cyan]Codec[/cyan]",
+                        choices=["ALAC", "MP3", "FLAC", "OGG"],
+                        default="ALAC",
+                    ).strip()
+                    advanced.setdefault("conversion", {})["codec"] = codec
+
+            console.print("\n[bold]Advanced: Filepaths[/bold]")
+            _def_ff = STREAMRIP_DEFAULTS["filepaths"]["folder_format"]
+            ff = Prompt.ask(
+                "[cyan]Folder format[/cyan]", default=_def_ff
+            ).strip()
+            if ff and ff != _def_ff:
+                advanced.setdefault("filepaths", {})["folder_format"] = ff
+
+            if not any(advanced.values()):
+                advanced = None
+
         prompted = {
             "arl": arl,
             "quality": quality,
@@ -861,7 +952,7 @@ def run_setup_wizard() -> None:
         }
 
         try:
-            _write_or_update_config(modern_path, prompted)
+            _write_or_update_config(modern_path, prompted, advanced=advanced)
 
             sr_path = ensure_streamrip_config_exists()
             merge_mdl_config_into_streamrip(
@@ -885,6 +976,9 @@ def run_setup_wizard() -> None:
                         console.print(f"[red]Error deleting file:[/red] {e}")
 
             console.print('\nTry: [bold white]mdl "artist - track name"[/bold white]\n')
+
+            # Safety-net: fill any remaining gaps
+            ensure_mdl_config_complete()
         except Exception as e:
             console.print(f"\n[bold red]Error saving config:[/bold red] {e}")
 
