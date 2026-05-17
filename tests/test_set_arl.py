@@ -1,10 +1,12 @@
 """Tests for set_arl and related error-message helpers."""
+import warnings
 import pytest
 import tomlkit
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import src.config as sc
-from src.config import set_arl, _secure_write, _write_or_update_config
+from src.config import set_arl, _secure_write, _write_or_update_config, _validate_deezer_arl
 
 
 # ---------------------------------------------------------------------------
@@ -97,3 +99,44 @@ def test_nonempty_exception_uses_message():
     exc = ValueError("bad value")
     msg = str(exc) or type(exc).__name__
     assert msg == "bad value"
+
+
+# ---------------------------------------------------------------------------
+# Session cleanup test
+# ---------------------------------------------------------------------------
+
+
+def test_validate_deezer_arl_closes_session(monkeypatch):
+    """_validate_deezer_arl must close the aiohttp session even when login fails."""
+    from streamrip.exceptions import AuthenticationError
+
+    close_calls = []
+
+    async def fake_close():
+        close_calls.append(True)
+
+    mock_session = MagicMock()
+    mock_session.close = fake_close
+
+    # Fake DeezerClient: login assigns self.session then raises AuthenticationError
+    class FakeDeezerClient:
+        def __init__(self, config):
+            self.session = None
+
+        async def login(self):
+            self.session = mock_session
+            raise AuthenticationError
+
+    monkeypatch.setattr(sc, "ensure_streamrip_config_exists", lambda: "/fake/path")
+
+    with patch("streamrip.client.DeezerClient", FakeDeezerClient), \
+         patch("streamrip.config.Config", MagicMock(return_value=MagicMock())):
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            result = _validate_deezer_arl("BAD_ARL")
+
+    assert result is False
+    assert close_calls, "session.close() was never called — session leak!"
+
+    unclosed = [w for w in caught if "Unclosed client session" in str(w.message)]
+    assert not unclosed, f"Got 'Unclosed client session' warning: {unclosed}"

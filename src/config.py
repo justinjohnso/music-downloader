@@ -570,29 +570,37 @@ def _validate_deezer_arl(arl: str, verbose: bool = False):
     """
     import asyncio
 
-    exc_detail: str | None = None
-    try:
-        from streamrip.client import DeezerClient
-        from streamrip.config import Config
+    from streamrip.client import DeezerClient
+    from streamrip.config import Config
 
-        sr_path = ensure_streamrip_config_exists()
-        config = Config(sr_path)
-        config.session.deezer.arl = arl
-        client = DeezerClient(config)
+    sr_path = ensure_streamrip_config_exists()
+    config = Config(sr_path)
+    config.session.deezer.arl = arl
+    client = DeezerClient(config)
 
-        async def _try_login() -> bool:
+    async def _try_login():
+        try:
             await client.login()
-            return getattr(client, "logged_in", False)
+            return True, None
+        except Exception as exc:
+            detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+            return False, detail
+        finally:
+            if getattr(client, "session", None) is not None:
+                try:
+                    await client.session.close()
+                except Exception:
+                    pass
 
-        result = asyncio.run(_try_login())
-        if verbose:
-            return result, None
-        return result
+    try:
+        result, exc_detail = asyncio.run(_try_login())
     except Exception as exc:
         exc_detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
-        if verbose:
-            return False, exc_detail
-        return False
+        result = False
+
+    if verbose:
+        return result, exc_detail
+    return result
 
 
 def set_arl(arl: str | None = None, *, verbose: bool = False) -> None:
