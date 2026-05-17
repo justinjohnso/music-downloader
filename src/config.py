@@ -5,6 +5,20 @@ import logging
 from pathlib import Path
 import tomlkit
 
+_log = logging.getLogger("mdl")
+
+
+def _secure_write(path: Path, content: str) -> None:
+    """Atomically write *content* to *path*, then chmod 600 on POSIX."""
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding="utf-8")
+    os.replace(tmp, path)
+    if os.name == "posix":
+        try:
+            os.chmod(path, 0o600)
+        except Exception as err:
+            _log.warning("mdl: could not chmod 600 %s: %s", path, err)
+
 # --- Monkey-patch streamrip to handle outdated configs and missing fields ---
 import streamrip.config
 from streamrip.config import Config
