@@ -510,13 +510,13 @@ def _apply_to_session(session, config_data: dict) -> None:
         if database.get("downloads_enabled") is not None:
             session.database.downloads_enabled = database["downloads_enabled"]
         if database.get("downloads_path") is not None:
-            session.database.downloads_path = database["downloads_path"]
+            session.database.downloads_path = os.path.expanduser(database["downloads_path"])
         if database.get("failed_downloads_enabled") is not None:
             session.database.failed_downloads_enabled = database[
                 "failed_downloads_enabled"
             ]
         if database.get("failed_downloads_path") is not None:
-            session.database.failed_downloads_path = database["failed_downloads_path"]
+            session.database.failed_downloads_path = os.path.expanduser(database["failed_downloads_path"])
 
     if "lastfm" in config_data:
         lastfm = config_data["lastfm"]
@@ -728,7 +728,10 @@ def ensure_mdl_config_complete() -> None:
                             parent.mkdir(parents=True, exist_ok=True)
                         except Exception:
                             pass
-                elif k in must_fill and not user_doc[section][key]:
+                elif k in must_fill and (
+                    not user_doc[section][key]
+                    or str(user_doc[section][key]).startswith("~")  # sqlite does not expand ~; rewrite to absolute path
+                ):
                     user_doc[section][key] = must_fill[k]
                     parent = Path(must_fill[k]).parent
                     try:

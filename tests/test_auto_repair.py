@@ -72,6 +72,29 @@ def test_db_parent_dir_created(tmp_config_dir):
     assert db_path.parent.exists(), "Parent dir for db path should be created"
 
 
+def test_auto_repair_expands_tilde_in_database_paths(tmp_config_dir):
+    path = tmp_config_dir["config_path"]
+    content = (
+        "[deezer]\narl = \"MY_ARL\"\nquality = 1\n\n"
+        "[database]\ndownloads_enabled = true\n"
+        "downloads_path = \"~/Library/Application Support/streamrip/downloads.db\"\n"
+        "failed_downloads_enabled = true\n"
+        "failed_downloads_path = \"~/Library/Application Support/streamrip/failed.db\"\n"
+    )
+    _secure_write(path, content)
+
+    ensure_mdl_config_complete()
+
+    doc = tomlkit.parse(path.read_text())
+    dl_path = doc["database"]["downloads_path"]
+    fd_path = doc["database"]["failed_downloads_path"]
+    assert "~" not in dl_path, "downloads_path should not contain ~"
+    assert "~" not in fd_path, "failed_downloads_path should not contain ~"
+    assert dl_path.startswith("/"), "downloads_path should be absolute"
+    assert fd_path.startswith("/"), "failed_downloads_path should be absolute"
+    assert doc["deezer"]["arl"] == "MY_ARL", "arl should be preserved"
+
+
 def test_no_op_when_config_complete(tmp_config_dir, caplog):
     from src.config import _write_or_update_config
 
