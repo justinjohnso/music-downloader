@@ -526,12 +526,20 @@ def _apply_to_session(session, config_data: dict) -> None:
 
 
 def _get_mdl_config_dir() -> Path:
-    if sys.platform == "darwin":
-        return Path.home() / "Library/Application Support/music-downloader"
-    elif sys.platform == "win32":
-        return Path.home() / "AppData/Roaming/music-downloader"
-    else:
-        return Path.home() / ".config/music-downloader"
+    import appdirs
+
+    return Path(appdirs.user_config_dir("music-downloader", appauthor=False))
+
+
+def _get_streamrip_data_dir() -> Path:
+    import appdirs
+
+    return Path(appdirs.user_data_dir("streamrip", appauthor=False))
+
+
+def _default_database_paths() -> tuple[str, str]:
+    base = _get_streamrip_data_dir()
+    return (str(base / "downloads.db"), str(base / "failed_downloads.db"))
 
 
 def _get_mdl_config_path() -> Path:
