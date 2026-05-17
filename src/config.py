@@ -647,6 +647,94 @@ def _build_config_toml(
     return banner + content
 
 
+def _write_or_update_config(
+    path: Path,
+    prompted: dict,
+    advanced: dict | None = None,
+) -> None:
+    """Write a full config if *path* is absent/empty, otherwise fill only missing keys."""
+    import copy
+    from src.schema import STREAMRIP_DEFAULTS
+
+    if not path.exists() or path.stat().st_size == 0:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        content = _build_config_toml(
+            arl=prompted.get("arl", ""),
+            quality=prompted.get("quality", 1),
+            folder=prompted.get("folder", "~/Music/Music Downloader"),
+            spotify_id=prompted.get("spotify_id", ""),
+            spotify_secret=prompted.get("spotify_secret", ""),
+            advanced=advanced,
+        )
+        _secure_write(path, content)
+        return
+
+    # Merge into existing file — preserve user values, fill only missing
+    user_doc = tomlkit.parse(path.read_text(encoding="utf-8"))
+    defaults = copy.deepcopy(STREAMRIP_DEFAULTS)
+
+    db_path, failed_db_path = _default_database_paths()
+    must_fill = {
+        ("database", "downloads_path"): db_path,
+        ("database", "failed_downloads_path"): failed_db_path,
+    }
+    changed: list[str] = []
+
+    for section, default_values in defaults.items():
+        if not isinstance(default_values, dict):
+            continue
+        if section not in user_doc:
+            user_doc.add(section, copy.deepcopy(default_values))
+            changed.append(section)
+            # Apply lastfm.source override for freshly-added section
+            if section == "lastfm":
+                user_doc["lastfm"]["source"] = "deezer"
+        else:
+            for key, default_val in default_values.items():
+                k = (section, key)
+                if key not in user_doc[section]:
+                    user_doc[section].add(key, default_val)
+                    changed.append(f"{section}.{key}")
+                elif k in must_fill and not user_doc[section][key]:
+                    user_doc[section][key] = must_fill[k]
+                    changed.append(f"{section}.{key}")
+
+    # Apply prompted overrides (explicit user input wins)
+    user_doc["deezer"]["arl"] = prompted["arl"]
+    user_doc["deezer"]["quality"] = prompted["quality"]
+    user_doc["downloads"]["folder"] = os.path.expanduser(prompted["folder"])
+
+    if prompted.get("spotify_id") or prompted.get("spotify_secret"):
+        if "spotify" not in user_doc:
+            user_doc.add("spotify", tomlkit.table())
+        user_doc["spotify"]["client_id"] = prompted.get("spotify_id", "")
+        user_doc["spotify"]["client_secret"] = prompted.get("spotify_secret", "")
+
+    # Apply advanced overrides
+    if advanced:
+        for section, keys in advanced.items():
+            if isinstance(keys, dict):
+                if section not in user_doc:
+                    user_doc.add(section, tomlkit.table())
+                    changed.append(section)
+                for k, v in keys.items():
+                    user_doc[section][k] = v
+            else:
+                user_doc[section] = keys
+
+    # Ensure [spotify] section exists
+    if "spotify" not in user_doc:
+        spotify_table = tomlkit.table()
+        spotify_table.add(tomlkit.comment("client_id = \"\""))
+        spotify_table.add(tomlkit.comment("client_secret = \"\""))
+        user_doc.add("spotify", spotify_table)
+
+    _secure_write(path, tomlkit.dumps(user_doc))
+
+    if changed:
+        _log.info("mdl: filled in missing config keys: %s", ", ".join(changed))
+
+
 def run_setup_wizard() -> None:
     from rich.console import Console
     from rich.prompt import Prompt, Confirm
@@ -764,17 +852,22 @@ def run_setup_wizard() -> None:
                 password=True,
             ).strip()
 
-        config_content = _build_config_toml(
-            arl, quality, folder, spotify_id, spotify_secret
-        )
+        prompted = {
+            "arl": arl,
+            "quality": quality,
+            "folder": folder,
+            "spotify_id": spotify_id,
+            "spotify_secret": spotify_secret,
+        }
 
         try:
-            modern_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(modern_path, "w", encoding="utf-8") as f:
-                f.write(config_content)
+            _write_or_update_config(modern_path, prompted)
 
             sr_path = ensure_streamrip_config_exists()
-            merge_mdl_config_into_streamrip(sr_path, tomlkit.parse(config_content))
+            merge_mdl_config_into_streamrip(
+                sr_path,
+                tomlkit.parse(modern_path.read_text(encoding="utf-8")),
+            )
 
             console.print("\n[bold green]✓ Setup complete![/bold green]")
             console.print(f"[dim]Config saved to:[/dim] [cyan]{modern_path}[/cyan]")
