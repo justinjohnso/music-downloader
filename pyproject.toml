@@ -19,14 +19,16 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
 ]
-dependencies = [
-    "spotipy",
-    "tomlkit",
-    "appdirs",
-    "PyQt6",
-]
+dynamic = ["dependencies"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
 
 [project.scripts]
 music-downloader = "src.downloader:main"
 mdl = "src.downloader:main"
 mdl-gui = "src.downloader:main_gui"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
