@@ -4,12 +4,20 @@ A Python CLI and GUI tool for downloading high-quality music tracks from Deezer 
 
 ## Quick Start
 
-1. **Install pipx, python3.14 & jpeg-turbo** (if you don't have them):
-   ```bash
-   brew install pipx
-   brew install python@3.14
-   brew install jpeg-turbo pkgconf
-   ```
+1. **Install pipx and Python 3** (if you don't have them):
+   - **macOS**:
+     ```bash
+     brew install pipx python
+     brew install jpeg-turbo pkgconf
+     ```
+   - **Windows**:
+     Install [Python 3.10+](https://www.python.org/downloads/) (use a stable release like 3.12 or 3.13, avoid pre-release versions to prevent build errors).
+     You will also need the [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) to compile C-extensions like `cffi`.
+     Then install pipx:
+     ```cmd
+     py -m pip install --user pipx
+     py -m pipx ensurepath
+     ```
 
 1. **Clone and install**:
    ```bash
