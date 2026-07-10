@@ -24,6 +24,9 @@ dynamic = ["dependencies"]
 [tool.setuptools.dynamic]
 dependencies = {file = ["requirements.txt"]}
 
+[tool.setuptools.package-data]
+"*" = ["*.toml", "*.json"]
+
 [project.scripts]
 music-downloader = "src.downloader:main"
 mdl = "src.downloader:main"
