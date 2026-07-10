@@ -14,10 +14,12 @@ _DEFAULT_CLIENT_SECRET = base64.b64decode(
 
 def _get_spotify_app_client(client_id: str, client_secret: str) -> spotipy.Spotify:
     """App-only Spotify client for simple public metadata lookups."""
+    import spotipy.cache_handler
     return spotipy.Spotify(
         auth_manager=SpotifyClientCredentials(
             client_id=client_id,
             client_secret=client_secret,
+            cache_handler=spotipy.cache_handler.MemoryCacheHandler()
         )
     )
 
@@ -152,6 +154,41 @@ def get_spotify_tracks(
                     "or re-authenticate."
                 ) from e
             raise
+
+    elif spotify_type == "album":
+        sp = _get_spotify_app_client(client_id, client_secret)
+
+        # Get album name
+        album_info = sp.album(spotify_id)
+        album_name = album_info["name"]
+
+        # Get album tracks
+        results = sp.album_tracks(spotify_id)
+
+        for item in results["items"]:
+            if item:
+                artist = (
+                    item["artists"][0]["name"]
+                    if item["artists"]
+                    else "Unknown Artist"
+                )
+                title = item["name"]
+                tracks.append({"artist": artist, "title": title})
+
+        # Handle albums with more than 50 tracks (Spotify's pagination)
+        while results["next"]:
+            results = sp.next(results)
+            for item in results["items"]:
+                if item:
+                    artist = (
+                        item["artists"][0]["name"]
+                        if item["artists"]
+                        else "Unknown Artist"
+                    )
+                    title = item["name"]
+                    tracks.append({"artist": artist, "title": title})
+
+        return tracks, {"is_playlist": True, "name": album_name}
 
     else:
         raise ValueError(f"Unsupported Spotify link type: {spotify_type}")
