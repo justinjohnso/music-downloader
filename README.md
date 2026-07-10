@@ -11,7 +11,7 @@ A Python CLI and GUI tool for downloading high-quality music tracks from Deezer 
      brew install jpeg-turbo pkgconf
      ```
    - **Windows**:
-     Install [Python 3.10+](https://www.python.org/downloads/) (use a stable release like 3.12 or 3.13, avoid pre-release versions to prevent build errors).
+     Install [Python 3.10+](https://www.python.org/downloads/).
      You will also need the [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) to compile C-extensions like `cffi`.
      Then install pipx:
      ```cmd
@@ -52,6 +52,12 @@ mdl "https://open.spotify.com/playlist/..."
 
 # Run with detailed output
 mdl --verbose "Artist - Track"
+
+# Sync downloads DB from your configured downloads/library folder
+mdl --sync-db
+
+# Sync downloads DB from a specific folder
+mdl --sync-db "/path/to/library/folder"
 ```
 
 ### GUI
@@ -62,10 +68,38 @@ mdl-gui
 
 ## Configuration
 
-The `mdl-config.toml` file is searched in the following locations (in order):
-1. Current working directory
-2. User's home directory (`~/mdl-config.toml`)
-3. Platform Application Support folder (e.g., `~/Library/Application Support/music-downloader/` on macOS).
+### Config location
+
+`mdl-config.toml` is stored at the platform-appropriate application support directory:
+
+| Platform | Path |
+|----------|------|
+| macOS    | `~/Library/Application Support/music-downloader/mdl-config.toml` |
+| Linux    | `~/.config/music-downloader/mdl-config.toml` |
+| Windows  | `~/AppData/Roaming/music-downloader/mdl-config.toml` |
+
+Legacy paths (`~/mdl-config.toml`, `./mdl-config.toml`) are still detected and a one-time migration prompt is shown. Run `mdl --setup` to move to the modern location.
+
+The file contains full streamrip configuration (all 15 sections) plus a `[spotify]` section. It is written with `chmod 600` on POSIX systems — keep it private as it holds your Deezer ARL.
+
+### Setup wizard
+
+Run `mdl --setup` to interactively configure:
+1. **Deezer ARL** (required) — validated on entry
+2. **Download folder**
+3. **Audio quality** — 320kbps MP3 or FLAC
+4. **Spotify credentials** (optional) — for resolving Spotify links
+5. **Advanced options** (optional, press Enter to skip each):
+   - Download concurrency and max connections
+   - Qobuz and Tidal credentials
+   - Audio conversion codec
+   - Filepath folder format
+
+Re-running setup is safe — it preserves any values you have manually edited in the file, only updating the keys you explicitly answer.
+
+### Auto-repair
+
+On every `mdl` invocation, the tool silently checks that your config contains all required sections and keys. If anything is missing (e.g., after a streamrip schema update), it is filled in from defaults and logged at INFO level. No action required.
 
 ### Spotify Credentials
 To resolve Spotify links, you must provide your own API credentials in `mdl-config.toml`:
@@ -90,6 +124,46 @@ To download from Deezer, you need an ARL cookie from your account. The setup wiz
 
 **"Spotify API credentials not found"**
 - Ensure you have correctly set the `client_id` and `client_secret` in your `mdl-config.toml` from your Spotify Developer Application (https://developer.spotify.com/).
+
+## Regenerating the Example Config
+
+`mdl-config-example.toml` is generated from the current setup wizard defaults. To update it after schema changes:
+
+```bash
+python scripts/regen-example-config.py
+```
+
+## Maintaining Vendored streamrip Overrides
+
+This project keeps `vendor/streamrip` as a submodule and stores local vendor edits as patch files so updates stay manageable.
+
+Use:
+
+```bash
+# Export current local streamrip edits to a patch file
+./scripts/streamrip-overrides.sh export
+
+# Inspect patch/submodule state
+./scripts/streamrip-overrides.sh status
+
+# Check if patch applies cleanly to current submodule checkout
+./scripts/streamrip-overrides.sh check
+
+# Apply patch to a clean submodule working tree
+./scripts/streamrip-overrides.sh apply
+```
+
+Patch location:
+
+```text
+vendor/streamrip-patches/0001-local-overrides.patch
+```
+
+Recommended update flow:
+1. Update submodule to desired upstream revision.
+2. Run `./scripts/streamrip-overrides.sh check`.
+3. If clean, run `./scripts/streamrip-overrides.sh apply`.
+4. Re-run project verification (`ruff check .` and tests).
 
 ## License
 
