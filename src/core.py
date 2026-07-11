@@ -779,6 +779,8 @@ def sync_downloads_db_from_library(
     db = _build_database_from_config(config)
 
     target_path = library_path or config.file.downloads.folder
+    if target_path:
+        target_path = os.path.expanduser(target_path)
 
     if not target_path or not os.path.exists(target_path):
         print(_warn(f"Library path does not exist: {target_path}"))

@@ -1,7 +1,6 @@
 """Tests for ensure_mdl_config_complete (auto-repair on startup)."""
 import logging
 import tomlkit
-import pytest
 from pathlib import Path
 
 from src.config import ensure_mdl_config_complete, _secure_write
@@ -62,7 +61,6 @@ def test_empty_database_path_filled(tmp_config_dir):
 
 def test_db_parent_dir_created(tmp_config_dir):
     path = tmp_config_dir["config_path"]
-    data_dir = tmp_config_dir["data_dir"]
     _write_minimal(path)
 
     ensure_mdl_config_complete()

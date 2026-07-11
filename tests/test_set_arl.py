@@ -3,10 +3,10 @@ import warnings
 import pytest
 import tomlkit
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import src.config as sc
-from src.config import set_arl, _secure_write, _write_or_update_config, _validate_deezer_arl
+from src.config import set_arl, _write_or_update_config, _validate_deezer_arl
 
 
 # ---------------------------------------------------------------------------

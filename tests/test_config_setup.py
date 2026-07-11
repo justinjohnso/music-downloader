@@ -3,7 +3,6 @@ import os
 import stat
 import tomlkit
 import pytest
-from pathlib import Path
 
 from src.schema import STREAMRIP_SECTIONS
 from src.config import _build_config_toml, _write_or_update_config

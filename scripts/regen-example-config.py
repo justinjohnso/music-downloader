@@ -4,6 +4,7 @@
 Usage:
     python scripts/regen-example-config.py
 """
+import os
 import sys
 from pathlib import Path
 
@@ -13,8 +14,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from src.config import _build_config_toml  # noqa: E402
 
 OUTPUT = Path(__file__).resolve().parents[1] / "mdl-config-example.toml"
-
-import os
 
 folder_display = "~/Music/Music Downloader"
 content = _build_config_toml(

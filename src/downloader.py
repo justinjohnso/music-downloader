@@ -1,6 +1,5 @@
 import argparse
 import sys
-import os
 
 # aiodns requires the SelectorEventLoop on Windows
 if sys.platform == "win32":

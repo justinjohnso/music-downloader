@@ -1,14 +1,9 @@
 """Integration test: config produced by mdl can be loaded by streamrip."""
 import tomlkit
-import pytest
-from pathlib import Path
 
 from src.config import (
-    _build_config_toml,
     _write_or_update_config,
     merge_mdl_config_into_streamrip,
-    ensure_streamrip_config_exists,
-    get_default_config_path,
 )
 
 

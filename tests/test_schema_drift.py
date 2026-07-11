@@ -1,10 +1,9 @@
 """Tests that guard against schema drift between streamrip and mdl."""
 import os
-import tomlkit
 import pytest
 from pathlib import Path
 
-from src.schema import iter_section_keys, STREAMRIP_SECTIONS
+from src.schema import iter_section_keys
 from src.config import _build_config_toml
 
 

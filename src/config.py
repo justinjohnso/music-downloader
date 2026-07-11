@@ -4,6 +4,8 @@ import tempfile
 import logging
 from pathlib import Path
 import tomlkit
+import streamrip.config
+from streamrip.config import Config
 
 _log = logging.getLogger("mdl")
 
@@ -20,9 +22,6 @@ def _secure_write(path: Path, content: str) -> None:
             _log.warning("mdl: could not chmod 600 %s: %s", path, err)
 
 # --- Monkey-patch streamrip to handle outdated configs and missing fields ---
-import streamrip.config
-from streamrip.config import Config
-
 # 1. Bypass OutdatedConfigError and auto-upgrade version
 _original_from_toml = streamrip.config.ConfigData.from_toml
 
@@ -545,13 +544,13 @@ def _apply_to_session(session, config_data: dict) -> None:
 def _get_mdl_config_dir() -> Path:
     import appdirs
 
-    return Path(appdirs.user_config_dir("music-downloader", appauthor=False))
+    return Path(appdirs.user_config_dir("music-downloader", appauthor=False, roaming=True))
 
 
 def _get_streamrip_data_dir() -> Path:
     import appdirs
 
-    return Path(appdirs.user_data_dir("streamrip", appauthor=False))
+    return Path(appdirs.user_data_dir("streamrip", appauthor=False, roaming=True))
 
 
 def _default_database_paths() -> tuple[str, str]:
