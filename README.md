@@ -1,6 +1,6 @@
 # Music Downloader
 
-A Python CLI and GUI tool for downloading high-quality music tracks from Deezer (with Qobuz fallback) based on search queries or Spotify links.
+A Python CLI and GUI tool that extends [streamrip](https://github.com/nathom/streamrip) for downloading high-quality music tracks from Deezer (with Qobuz fallback) based on search queries or Spotify links.
 
 ## Quick Start
 
@@ -47,8 +47,9 @@ mdl "The Beatles - Hey Jude"
 # Download a Spotify track (requires Spotify credentials in config)
 mdl "https://open.spotify.com/track/..."
 
-# Download an entire Spotify playlist (generates an M3U file)
+# Download an entire Spotify playlist or album
 mdl "https://open.spotify.com/playlist/..."
+mdl "https://open.spotify.com/album/..."
 
 # Run with detailed output
 mdl --verbose "Artist - Track"
@@ -58,6 +59,10 @@ mdl --sync-db
 
 # Sync downloads DB from a specific folder
 mdl --sync-db "/path/to/library/folder"
+
+# Quickly update an expired Deezer ARL without re-running full setup
+mdl --set-arl
+mdl --set-arl "YOUR_NEW_ARL_HERE"
 ```
 
 ### GUI
@@ -120,7 +125,7 @@ To download from Deezer, you need an ARL cookie from your account. The setup wiz
 - Ensure `pipx` is in your PATH. Try running `pipx ensurepath` and restarting your terminal.
 
 **"Login failed" (Deezer)**
-- Your Deezer ARL has likely expired. Get a new one from the browser and update your config via `mdl --setup`.
+- Your Deezer ARL has likely expired. Get a new one from the browser and update your config quickly via `mdl --set-arl` or re-run the full wizard via `mdl --setup`.
 
 **"Spotify API credentials not found"**
 - Ensure you have correctly set the `client_id` and `client_secret` in your `mdl-config.toml` from your Spotify Developer Application (https://developer.spotify.com/).
