@@ -1,5 +1,13 @@
 import argparse
 import sys
+import os
+
+# aiodns requires the SelectorEventLoop on Windows
+if sys.platform == "win32":
+    import asyncio
+
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from .gui import launch_gui
 from .spotify import is_spotify_link
 from .core import process_spotify_link, download_track
