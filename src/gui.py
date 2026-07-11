@@ -144,7 +144,9 @@ def launch_gui():
     config = {}
 
     try:
-        with open("mdl-config.toml", "r") as f:
+        from src.config import _get_mdl_config_path
+        config_path = _get_mdl_config_path()
+        with open(config_path, "r", encoding="utf-8") as f:
             config = tomlkit.parse(f.read())
         for section_name, section in config.items():
             if isinstance(section, dict):
@@ -238,7 +240,9 @@ def launch_gui():
             else:
                 config[section_name][key] = widget.text()
         try:
-            with open("mdl-config.toml", "w") as f:
+            from src.config import _get_mdl_config_path
+            config_path = _get_mdl_config_path()
+            with open(config_path, "w", encoding="utf-8") as f:
                 tomlkit.dump(config, f)
             config_status.setText("Config saved!")
         except Exception as e:
