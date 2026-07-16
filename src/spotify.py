@@ -110,21 +110,21 @@ def get_spotify_tracks(
         try:
             try:
                 playlist_info = sp_app.playlist(spotify_id)
+                playlist_name = playlist_info["name"]
+                # Attempt to fetch the first page of tracks to ensure we don't get a 403 on /tracks
+                results = sp_app.playlist_items(spotify_id, additional_types=["track"])
                 sp = sp_app
             except Exception as app_e:
-                # If it fails (likely private playlist), fall back to user auth
+                # If it fails (private playlist, or Spotify catalog restrictions), fall back to user auth
                 msg = str(app_e)
                 if "401" in msg or "403" in msg or "404" in msg:
                     sp_user = _get_spotify_user_client(client_id, client_secret)
                     playlist_info = sp_user.playlist(spotify_id)
+                    playlist_name = playlist_info["name"]
+                    results = sp_user.playlist_items(spotify_id, additional_types=["track"])
                     sp = sp_user
                 else:
                     raise
-
-            playlist_name = playlist_info["name"]
-
-            # Get playlist tracks
-            results = sp.playlist_items(spotify_id, additional_types=["track"])
 
             for item in results["items"]:
                 track = item.get("track") or item.get("item")
