@@ -103,10 +103,24 @@ def get_spotify_tracks(
         return tracks, {"is_playlist": False, "name": None}
 
     elif spotify_type == "playlist":
-        sp = _get_spotify_user_client(client_id, client_secret)
+        # Try app-only client first (works for public playlists without user auth)
+        sp_app = _get_spotify_app_client(client_id, client_secret)
+        sp_user = None
 
         try:
-            playlist_info = sp.playlist(spotify_id)
+            try:
+                playlist_info = sp_app.playlist(spotify_id)
+                sp = sp_app
+            except Exception as app_e:
+                # If it fails (likely private playlist), fall back to user auth
+                msg = str(app_e)
+                if "401" in msg or "403" in msg or "404" in msg:
+                    sp_user = _get_spotify_user_client(client_id, client_secret)
+                    playlist_info = sp_user.playlist(spotify_id)
+                    sp = sp_user
+                else:
+                    raise
+
             playlist_name = playlist_info["name"]
 
             # Get playlist tracks
