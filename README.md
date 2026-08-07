@@ -1,175 +1,110 @@
 # Music Downloader
 
-A Python CLI and GUI tool that extends [streamrip](https://github.com/nathom/streamrip) for downloading high-quality music tracks from Deezer (with Qobuz fallback) based on search queries or Spotify links.
+A lightweight, robust CLI and GUI application for downloading high-quality music directly from Deezer (with Qobuz fallback). Built on top of streamrip, it supports searching for tracks or passing Spotify links to seamlessly match and download your music.
+
+![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Built with](https://img.shields.io/badge/built%20with-streamrip-purple)
+
+<!-- screenshot_placeholder: gui_or_cli_hero.png -->
+
+## Features
+
+- **Spotify Integration:** Paste a Spotify track or playlist link to download the matching tracks.
+- **Direct Search:** Search for artists, albums, or tracks directly from the command line.
+- **High Quality Audio:** Choose between 320kbps MP3 or lossless FLAC.
+- **Automatic M3U Generation:** Creates `.m3u` playlists for downloaded albums and Spotify playlists.
+- **Interactive Setup:** First-run wizard makes configuring credentials and folders a breeze.
+- **Dual Interfaces:** Features a clean GUI (`mdl-gui`) alongside the powerful CLI (`mdl`).
+- **Self-Healing Config:** Safely manages configurations and synchronizes them with the streamrip engine.
 
 ## Quick Start
 
-1. **Install pipx and Python 3** (if you don't have them):
-   - **macOS**:
-     ```bash
-     brew install pipx python
-     brew install jpeg-turbo pkgconf
-     ```
-   - **Windows**:
-     Install [Python 3.10+](https://www.python.org/downloads/).
-     You will also need the [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) to compile C-extensions like `cffi`.
-     Then install pipx:
-     ```cmd
-     py -m pip install --user pipx
-     py -m pipx ensurepath
-     ```
+**1. Install Dependencies**
+Ensure you have `pipx` and Python 3.10+ installed.
 
-1. **Clone and install**:
-   ```bash
-   git clone --recursive https://github.com/justinjohnso/music-downloader.git
-   cd music-downloader
-   pipx install .
-   ```
-
-1. **Create Spotify Dev App** (if you're not using default creds):
-   
-   This is where you'll get your client ID & secret for the MDL setup. Use `http://127.0.0.1:8888/callback` as the redirect URI.
-   - Info: https://developer.spotify.com/documentation/web-api/concepts/apps
-   - Link: https://developer.spotify.com/
-
-1. **Run the setup wizard** — it will walk you through Deezer login, download folder, and quality settings:
-   ```bash
-   mdl --setup
-   ```
-
-## Usage
-
-### CLI
+**2. Clone & Install**
 ```bash
-# Search and download a track
-mdl "The Beatles - Hey Jude"
-
-# Download a Spotify track (requires Spotify credentials in config)
-mdl "https://open.spotify.com/track/..."
-
-# Download an entire Spotify playlist or album
-mdl "https://open.spotify.com/playlist/..."
-mdl "https://open.spotify.com/album/..."
-
-# Run with detailed output
-mdl --verbose "Artist - Track"
-
-# Sync downloads DB from your configured downloads/library folder
-mdl --sync-db
-
-# Sync downloads DB from a specific folder
-mdl --sync-db "/path/to/library/folder"
-
-# Quickly update an expired Deezer ARL without re-running full setup
-mdl --set-arl
-mdl --set-arl "YOUR_NEW_ARL_HERE"
+git clone --recursive https://github.com/justinjohnso/music-downloader.git
+cd music-downloader
+pipx install .
 ```
 
-### GUI
-Launch the graphical interface for a user-friendly experience:
+**3. Run Setup Wizard**
+The interactive setup will configure your Deezer cookie, download folder, and quality preferences.
+```bash
+mdl --setup
+```
+
+## Usage Examples
+
+You can use the CLI or launch the graphical interface.
+
+**CLI**
+```bash
+# Search and download a specific track
+mdl "The Beatles - Hey Jude"
+
+# Download a track using a Spotify link
+mdl "https://open.spotify.com/track/..."
+
+# Download an entire Spotify playlist
+mdl "https://open.spotify.com/playlist/..."
+
+# Quick ARL update if your Deezer login expires
+mdl --set-arl
+```
+
+**GUI**
+Launch the graphical interface for an easy-to-use search and download experience:
 ```bash
 mdl-gui
 ```
+<!-- screenshot_placeholder: gui_app_window.png -->
 
 ## Configuration
 
-### Config location
+The application is configured via `mdl-config.toml`, located in your platform's standard application support directory:
+- **macOS:** `~/Library/Application Support/music-downloader/mdl-config.toml`
+- **Linux:** `~/.config/music-downloader/mdl-config.toml`
+- **Windows:** `~/AppData/Roaming/music-downloader/mdl-config.toml`
 
-`mdl-config.toml` is stored at the platform-appropriate application support directory:
+For most users, running `mdl --setup` will handle all necessary configuration. Advanced users can manually edit this file to override streamrip's engine settings.
 
-| Platform | Path |
-|----------|------|
-| macOS    | `~/Library/Application Support/music-downloader/mdl-config.toml` |
-| Linux    | `~/.config/music-downloader/mdl-config.toml` |
-| Windows  | `~/AppData/Roaming/music-downloader/mdl-config.toml` |
+## Deezer ARL
 
-Legacy paths (`~/mdl-config.toml`, `./mdl-config.toml`) are still detected and a one-time migration prompt is shown. Run `mdl --setup` to move to the modern location.
+To download from Deezer, you must provide an ARL (cookie) from a logged-in account. The setup wizard will prompt you for this.
+- **How to find it:** See the [streamrip wiki](https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie).
+- **Expiry:** Deezer ARLs expire every 3-4 months. When downloads fail due to authentication, grab a fresh ARL and run `mdl --set-arl`.
 
-The file contains full streamrip configuration (all 15 sections) plus a `[spotify]` section. It is written with `chmod 600` on POSIX systems — keep it private as it holds your Deezer ARL.
+## Spotify Integration
 
-### Setup wizard
+Spotify links are resolved into `Artist - Title` queries and searched on Deezer. The CLI uses pre-configured local Spotify Developer credentials by default.
 
-Run `mdl --setup` to interactively configure:
-1. **Deezer ARL** (required) — validated on entry
-2. **Download folder**
-3. **Audio quality** — 320kbps MP3 or FLAC
-4. **Spotify credentials** (optional) — for resolving Spotify links
-5. **Advanced options** (optional, press Enter to skip each):
-   - Download concurrency and max connections
-   - Qobuz and Tidal credentials
-   - Audio conversion codec
-   - Filepath folder format
+*(Optional)* **Self-Hosted Spotify Backend:** If you prefer running a centralized resolver to keep Spotify credentials completely off the client device, a FastAPI backend implementation is available in the `backend/` directory.
 
-Re-running setup is safe — it preserves any values you have manually edited in the file, only updating the keys you explicitly answer.
+## Project Structure
 
-### Auto-repair
-
-On every `mdl` invocation, the tool silently checks that your config contains all required sections and keys. If anything is missing (e.g., after a streamrip schema update), it is filled in from defaults and logged at INFO level. No action required.
-
-### Spotify Credentials
-To resolve Spotify links, you must provide your own API credentials in `mdl-config.toml`:
-
-```toml
-[spotify]
-client_id = "your-client-id"
-client_secret = "your-client-secret"
-```
-Get them from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/).
-
-### Deezer ARL
-To download from Deezer, you need an ARL cookie from your account. The setup wizard will ask for it and explain where to find it. ARLs expire every 3-4 months; when login fails, grab a fresh one and run `mdl --setup` again.
+- `src/` — Core CLI, GUI, configuration management, and Spotify resolver
+- `tests/` — Pytest suite covering configuration and auto-repair logic
+- `vendor/streamrip/` — Git submodule containing the core streamrip engine
+- `backend/` — (Optional) FastAPI-based Spotify resolver backend
 
 ## Troubleshooting
 
-**"mdl: command not found"**
-- Ensure `pipx` is in your PATH. Try running `pipx ensurepath` and restarting your terminal.
+- **"mdl: command not found"**
+  Ensure `pipx` is in your PATH. Run `pipx ensurepath` and restart your terminal.
+- **"Deezer login failed" or "Your Deezer ARL has expired"**
+  Your ARL has likely expired. Grab a new one and run `mdl --set-arl`.
+- **Streamrip Vendor Errors**
+  If you see vendor missing errors during installation, ensure you cloned the repo with `--recursive` or run `git submodule update --init --recursive`.
 
-**"Login failed" (Deezer)**
-- Your Deezer ARL has likely expired. Get a new one from the browser and update your config quickly via `mdl --set-arl` or re-run the full wizard via `mdl --setup`.
+## Contributing
 
-**"Spotify API credentials not found"**
-- Ensure you have correctly set the `client_id` and `client_secret` in your `mdl-config.toml` from your Spotify Developer Application (https://developer.spotify.com/).
+Pull requests are welcome! Before submitting, ensure that your code is formatted with `ruff format .` and passes the test suite (`pytest -ra`).
 
-## Regenerating the Example Config
+## License & Credits
 
-`mdl-config-example.toml` is generated from the current setup wizard defaults. To update it after schema changes:
+This project is licensed under the [MIT License](LICENSE).
 
-```bash
-python scripts/regen-example-config.py
-```
-
-## Maintaining Vendored streamrip Overrides
-
-This project keeps `vendor/streamrip` as a submodule and stores local vendor edits as patch files so updates stay manageable.
-
-Use:
-
-```bash
-# Export current local streamrip edits to a patch file
-./scripts/streamrip-overrides.sh export
-
-# Inspect patch/submodule state
-./scripts/streamrip-overrides.sh status
-
-# Check if patch applies cleanly to current submodule checkout
-./scripts/streamrip-overrides.sh check
-
-# Apply patch to a clean submodule working tree
-./scripts/streamrip-overrides.sh apply
-```
-
-Patch location:
-
-```text
-vendor/streamrip-patches/0001-local-overrides.patch
-```
-
-Recommended update flow:
-1. Update submodule to desired upstream revision.
-2. Run `./scripts/streamrip-overrides.sh check`.
-3. If clean, run `./scripts/streamrip-overrides.sh apply`.
-4. Re-run project verification (`ruff check .` and tests).
-
-## License
-
-MIT
+Heavily built upon [streamrip](https://github.com/nathom/streamrip). Massive thanks to its contributors for the core engine!
