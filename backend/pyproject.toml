@@ -1,0 +1,11 @@
+[project]
+name = "spotify-auth-backend"
+version = "0.1.0"
+description = "Spotify resolver backend for music-downloader"
+dependencies = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.22.0",
+    "pydantic>=2.0.0",
+    "spotipy>=2.23.0"
+]
+requires-python = ">=3.10"
