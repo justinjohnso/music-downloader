@@ -37,10 +37,10 @@ def test_streamrip_config_constructs_without_error(tmp_config_dir, tmp_path):
     assert config.session.deezer.arl == "TESTARL"
 
 
-def test_apply_config_overrides_expands_tilde(tmp_path):
-    """apply_config_overrides must expand ~ in database path values."""
+def test_merge_mdl_config_into_streamrip_expands_tilde(tmp_path):
+    """merge_mdl_config_into_streamrip must expand ~ in database path values."""
     from streamrip.config import Config, set_user_defaults
-    from src.config import apply_config_overrides
+    from src.config import merge_mdl_config_into_streamrip
 
     sr_config_path = tmp_path / "streamrip" / "config.toml"
     sr_config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,8 @@ def test_apply_config_overrides_expands_tilde(tmp_path):
         }
     }
 
-    apply_config_overrides(config, config_data)
+    merge_mdl_config_into_streamrip(str(sr_config_path), config_data)
+    config = Config(str(sr_config_path))
 
     assert "~" not in config.session.database.downloads_path
     assert "~" not in config.session.database.failed_downloads_path

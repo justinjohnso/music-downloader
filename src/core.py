@@ -135,7 +135,19 @@ async def download_track_with_client(
                 return "duplicate_skipped", track_label
             await resolved.rip()
             print(f"Successfully downloaded '{title}' by {artist}")
-            return "downloaded", track_label
+
+            import glob
+            from pathlib import Path
+            AUDIO_EXTENSIONS = {'.mp3', '.flac', '.m4a', '.ogg', '.opus', '.aac', '.wav'}
+            actual_path = track_label
+            try:
+                for fname in os.listdir(download_folder):
+                    if title.lower() in fname.lower() and Path(fname).suffix.lower() in AUDIO_EXTENSIONS:
+                        actual_path = fname
+                        break
+            except Exception:
+                pass
+            return "downloaded", actual_path
         except Exception as e:
             print(f"Error downloading track: {e}")
             return "failed", track_label
@@ -164,7 +176,7 @@ async def download_multiple_tracks(
     from src.config import (
         load_config_with_path,
         ensure_streamrip_config_exists,
-        apply_config_overrides,
+        merge_mdl_config_into_streamrip,
     )
 
     # Load configuration from mdl-config.toml
@@ -181,7 +193,7 @@ async def download_multiple_tracks(
 
     # Load configuration and initialize client (only once for all tracks)
     config = Config(config_path)
-    apply_config_overrides(config, config_data)
+    merge_mdl_config_into_streamrip(config_path, config_data)
     config.session.update_toml()  # Sync session changes back to file config
     client = DeezerClient(config)
     db = _build_database_from_config(config)
@@ -205,6 +217,7 @@ async def download_multiple_tracks(
 
         successful_downloads = 0
         failed_downloads = 0
+        downloaded_files = []
         duplicate_downloads = 0
         duplicate_tracks: List[Dict[str, str]] = []
 
@@ -231,6 +244,8 @@ async def download_multiple_tracks(
 
             if status == "downloaded":
                 successful_downloads += 1
+                if track_label:
+                    downloaded_files.append(track_label)
             elif status == "duplicate_skipped":
                 duplicate_downloads += 1
                 if track_label:
@@ -267,6 +282,8 @@ async def download_multiple_tracks(
                 )
                 if status == "downloaded":
                     redownload_successful += 1
+                    if _:
+                        downloaded_files.append(_)
                 else:
                     redownload_failed += 1
 
@@ -286,14 +303,11 @@ async def download_multiple_tracks(
             m3u_filename = f"{safe_name}.m3u"
             m3u_path = os.path.join(download_folder, m3u_filename)
             try:
-                # List all .mp3 files in the download folder
-                mp3_files = [
-                    f for f in os.listdir(download_folder) if f.endswith(".mp3")
-                ]
-                mp3_files.sort()  # Sort for consistent order
+                downloaded_files.sort()
                 with open(m3u_path, "w", encoding="utf-8") as f:
-                    for mp3 in mp3_files:
-                        f.write(f"{mp3}\n")
+                    for fname in downloaded_files:
+                        f.write(f"{fname}
+")
                 print(f"Generated M3U playlist '{playlist_name}' at: {m3u_path}")
             except Exception as e:
                 print(f"Warning: Could not generate M3U playlist: {e}")
@@ -342,7 +356,7 @@ async def download_track(
     from src.config import (
         load_config_with_path,
         ensure_streamrip_config_exists,
-        apply_config_overrides,
+        merge_mdl_config_into_streamrip,
     )
 
     # Load configuration from mdl-config.toml
@@ -359,7 +373,7 @@ async def download_track(
 
     # Load configuration and initialize client
     config = Config(config_path)
-    apply_config_overrides(config, config_data)
+    merge_mdl_config_into_streamrip(config_path, config_data)
     config.session.update_toml()  # Sync session changes back to file config
     client = DeezerClient(config)
 
@@ -440,6 +454,43 @@ def _colorize(text: str, *styles: str) -> str:
         return text
     return f"{''.join(styles)}{text}{ANSI_RESET}"
 
+
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def managed_client(client, verbose: bool = False):
+    try:
+        yield client
+    finally:
+        # Clean up client session
+        if hasattr(client, "session") and client.session:
+            try:
+                if not client.session.closed:
+                    # Cancel any pending requests
+                    import asyncio
+                    for task in asyncio.all_tasks():
+                        if not task.done() and task != asyncio.current_task():
+                            task.cancel()
+                            try:
+                                await task
+                            except asyncio.CancelledError:
+                                pass
+
+                    # Close the session
+                    await client.session.close()
+
+                # Close the connector
+                if hasattr(client.session, "_connector") and client.session._connector:
+                    await client.session._connector.close()
+
+                import asyncio
+                await asyncio.sleep(0.1)
+
+                if verbose:
+                    print("Successfully closed client session")
+            except (Exception, asyncio.CancelledError) as e:
+                if verbose:
+                    print(f"Warning during session cleanup: {e}")
 
 def _info(text: str) -> str:
     return _colorize(text, ANSI_CYAN)
@@ -764,7 +815,7 @@ def sync_downloads_db_from_library(
     from src.config import (
         load_config_with_path,
         ensure_streamrip_config_exists,
-        apply_config_overrides,
+        merge_mdl_config_into_streamrip,
     )
     import os
     import asyncio
@@ -774,7 +825,7 @@ def sync_downloads_db_from_library(
     config_path = ensure_streamrip_config_exists()
 
     config = Config(config_path)
-    apply_config_overrides(config, config_data)
+    merge_mdl_config_into_streamrip(config_path, config_data)
 
     db = _build_database_from_config(config)
 
