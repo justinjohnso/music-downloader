@@ -20,7 +20,7 @@ def test_extract_spotify_info():
 @patch("src.config.load_config")
 def test_get_spotify_tracks(mock_load_config, mock_spotify):
     # Setup mocks
-    mock_load_config.return_value = {}
+    mock_load_config.return_value = {"spotify": {"client_id": "test", "client_secret": "test"}}
     mock_sp_instance = MagicMock()
     mock_spotify.return_value = mock_sp_instance
     

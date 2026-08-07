@@ -1,44 +1,9 @@
-import base64
+import json
 from typing import List, Dict, Tuple, Any
+from urllib import error, request
+
 import spotipy
-from spotipy.oauth2 import SpotifyClientCredentials, SpotifyOAuth
-from pathlib import Path
-
-# Pre-configured default Spotify credentials (base64 obfuscated)
-_DEFAULT_CLIENT_ID = base64.b64decode(
-    b"ZDczNzQ4YjdjZjU1NGJjNjg3NWQ2MmYyZmJhZmM5M2I="
-).decode()
-_DEFAULT_CLIENT_SECRET = base64.b64decode(
-    b"MTc0YjRhOWMxNTMzNDU1M2I3NjhjMDViZDQwMTBmNGE="
-).decode()
-
-def _get_spotify_app_client(client_id: str, client_secret: str) -> spotipy.Spotify:
-    """App-only Spotify client for simple public metadata lookups."""
-    import spotipy.cache_handler
-    return spotipy.Spotify(
-        auth_manager=SpotifyClientCredentials(
-            client_id=client_id,
-            client_secret=client_secret,
-            cache_handler=spotipy.cache_handler.MemoryCacheHandler()
-        )
-    )
-
-
-def _get_spotify_user_client(client_id: str, client_secret: str) -> spotipy.Spotify:
-    """User-authenticated Spotify client for playlist access."""
-    cache_path = str(Path.home() / ".cache-music-downloader-spotify")
-
-    auth_manager = SpotifyOAuth(
-        client_id=client_id,
-        client_secret=client_secret,
-        redirect_uri="http://127.0.0.1:8888/callback",
-        scope="playlist-read-private playlist-read-collaborative",
-        open_browser=True,
-        show_dialog=True,
-        cache_path=cache_path,
-    )
-
-    return spotipy.Spotify(auth_manager=auth_manager)
+from spotipy.oauth2 import SpotifyClientCredentials
 
 
 def is_spotify_link(link: str) -> bool:
@@ -77,35 +42,96 @@ def get_spotify_tracks(
     Returns:
         Tuple of (tracks list, info dict with 'is_playlist' and 'name')
     """
-    from src.config import load_config  # Import here to avoid circular import
+    from src.config import (
+        get_backend_config,
+        load_config,
+    )  # Import here to avoid circular import
 
     # Load configuration from mdl-config.toml file
     config_data = load_config()
 
-    # Set up Spotify client
-    client_id = config_data.get("spotify", {}).get("client_id") or _DEFAULT_CLIENT_ID
-    client_secret = (
-        config_data.get("spotify", {}).get("client_secret") or _DEFAULT_CLIENT_SECRET
-    )
+    backend_resolve_url, backend_api_key = get_backend_config(config_data)
 
-    # Extract Spotify ID and type
-    spotify_id, spotify_type = extract_spotify_info(spotify_link)
+    spotify_config = config_data.get("spotify", {})
+    if not isinstance(spotify_config, dict):
+        spotify_config = {}
 
-    tracks = []
+    client_id = spotify_config.get("client_id")
+    client_secret = spotify_config.get("client_secret")
 
-    if spotify_type == "track":
-        sp = _get_spotify_app_client(client_id, client_secret)
+    if not isinstance(client_id, str):
+        client_id = None
+    else:
+        client_id = client_id.strip() or None
 
-        track = sp.track(spotify_id)
-        artist = track["artists"][0]["name"]
-        title = track["name"]
-        tracks.append({"artist": artist, "title": title})
-        return tracks, {"is_playlist": False, "name": None}
+    if not isinstance(client_secret, str):
+        client_secret = None
+    else:
+        client_secret = client_secret.strip() or None
 
-    elif spotify_type == "playlist":
-        sp = _get_spotify_user_client(client_id, client_secret)
+    has_local_credentials = bool(client_id and client_secret)
 
+    backend_error: Exception | None = None
+    if backend_resolve_url and backend_api_key:
         try:
+            payload = json.dumps({"spotify_link": spotify_link}).encode("utf-8")
+            backend_request = request.Request(
+                backend_resolve_url,
+                data=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                    "X-API-Key": backend_api_key,
+                },
+                method="POST",
+            )
+            with request.urlopen(backend_request, timeout=15) as response:
+                backend_response = json.loads(response.read().decode("utf-8"))
+
+            tracks = backend_response.get("tracks")
+            info = backend_response.get("info")
+            if isinstance(tracks, list) and isinstance(info, dict):
+                return tracks, info
+            raise ValueError("Backend returned an invalid Spotify resolve payload.")
+        except error.HTTPError as exc:
+            detail = str(exc.reason)
+            try:
+                body = exc.read().decode("utf-8")
+                error_payload = json.loads(body)
+                detail = error_payload.get("detail") or detail
+            except Exception:
+                pass
+            backend_error = RuntimeError(
+                f"Spotify backend request failed with HTTP {exc.code}: {detail}"
+            )
+        except (error.URLError, json.JSONDecodeError, ValueError, TimeoutError) as exc:
+            backend_error = RuntimeError(f"Spotify backend request failed: {exc}")
+        except Exception as exc:
+            backend_error = RuntimeError(f"Spotify backend request failed: {exc}")
+
+    if has_local_credentials:
+        sp = spotipy.Spotify(
+            auth_manager=SpotifyClientCredentials(
+                client_id=client_id,
+                client_secret=client_secret,
+            )
+        )
+
+        # Extract Spotify ID and type
+        spotify_id, spotify_type = extract_spotify_info(spotify_link)
+
+        tracks = []
+
+        if spotify_type == "track":
+            # Get single track
+            track = sp.track(spotify_id)
+            artist = track["artists"][0]["name"]
+            title = track["name"]
+            tracks.append({"artist": artist, "title": title})
+            return tracks, {"is_playlist": False, "name": None}
+
+        elif spotify_type == "playlist":
+            # Get playlist name
             playlist_info = sp.playlist(spotify_id)
             playlist_name = playlist_info["name"]
 
@@ -113,82 +139,39 @@ def get_spotify_tracks(
             results = sp.playlist_items(spotify_id, additional_types=["track"])
 
             for item in results["items"]:
-                track = item.get("track") or item.get("item")
-                if not track or track.get("type") != "track":
-                    continue
-
-                artist = (
-                    track["artists"][0]["name"]
-                    if track.get("artists")
-                    else "Unknown Artist"
-                )
-                title = track.get("name", "Unknown Title")
-                tracks.append({"artist": artist, "title": title})
+                if "track" in item and item["track"]:
+                    track = item["track"]
+                    artist = (
+                        track["artists"][0]["name"]
+                        if track["artists"]
+                        else "Unknown Artist"
+                    )
+                    title = track["name"]
+                    tracks.append({"artist": artist, "title": title})
 
             # Handle playlists with more than 100 tracks (Spotify's pagination)
             while results["next"]:
                 results = sp.next(results)
-
                 for item in results["items"]:
-                    track = item.get("track") or item.get("item")
-                    if not track or track.get("type") != "track":
-                        continue
-
-                    artist = (
-                        track["artists"][0]["name"]
-                        if track.get("artists")
-                        else "Unknown Artist"
-                    )
-                    title = track.get("name", "Unknown Title")
-                    tracks.append({"artist": artist, "title": title})
+                    if "track" in item and item["track"]:
+                        track = item["track"]
+                        artist = (
+                            track["artists"][0]["name"]
+                            if track["artists"]
+                            else "Unknown Artist"
+                        )
+                        title = track["name"]
+                        tracks.append({"artist": artist, "title": title})
 
             return tracks, {"is_playlist": True, "name": playlist_name}
 
-        except Exception as e:
-            msg = str(e)
-            if "401" in msg or "Valid user authentication required" in msg:
-                raise RuntimeError(
-                    "Spotify rejected this playlist request. "
-                    "The authenticated Spotify user may not have access to this playlist, "
-                    "or the OAuth token is stale. Try a playlist owned by the logged-in user "
-                    "or re-authenticate."
-                ) from e
-            raise
+        else:
+            raise ValueError(f"Unsupported Spotify link type: {spotify_type}")
 
-    elif spotify_type == "album":
-        sp = _get_spotify_app_client(client_id, client_secret)
+    if backend_error is not None:
+        raise backend_error
 
-        # Get album name
-        album_info = sp.album(spotify_id)
-        album_name = album_info["name"]
-
-        # Get album tracks
-        results = sp.album_tracks(spotify_id)
-
-        for item in results["items"]:
-            if item:
-                artist = (
-                    item["artists"][0]["name"]
-                    if item["artists"]
-                    else "Unknown Artist"
-                )
-                title = item["name"]
-                tracks.append({"artist": artist, "title": title})
-
-        # Handle albums with more than 50 tracks (Spotify's pagination)
-        while results["next"]:
-            results = sp.next(results)
-            for item in results["items"]:
-                if item:
-                    artist = (
-                        item["artists"][0]["name"]
-                        if item["artists"]
-                        else "Unknown Artist"
-                    )
-                    title = item["name"]
-                    tracks.append({"artist": artist, "title": title})
-
-        return tracks, {"is_playlist": True, "name": album_name}
-
-    else:
-        raise ValueError(f"Unsupported Spotify link type: {spotify_type}")
+    raise ValueError(
+        "Spotify is not configured. Set [backend] resolve_url/api_key or provide "
+        "[spotify] client_id/client_secret."
+    )

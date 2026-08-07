@@ -19,3 +19,8 @@ quality = "mp3"
 # Get it at: https://github.com/nathom/streamrip/wiki/Finding-Your-Deezer-ARL-Cookie
 # Deezer ARLs expire every 3–4 months.
 arl = ""
+
+[backend]
+# Optional: Resolve Spotify links via a centralized backend instead of locally
+# resolve_url = "https://your-domain.example.com/spotify/resolve"
+# api_key = "your-api-key"

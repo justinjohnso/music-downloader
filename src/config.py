@@ -960,3 +960,9 @@ def run_setup_wizard() -> None:
     except KeyboardInterrupt:
         console.print("\n\n[yellow]Setup cancelled. Exiting...[/yellow]")
         return
+
+
+def get_backend_config(config_data: dict) -> tuple[str, str]:
+    """Extract backend URL and API key from config."""
+    backend = config_data.get("backend", {})
+    return backend.get("resolve_url", ""), backend.get("api_key", "")
