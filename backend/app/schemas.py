@@ -1,14 +1,16 @@
-from pydantic import BaseModel, HttpUrl
-from typing import List, Optional
+from pydantic import BaseModel
+
 
 class SpotifyResolveRequest(BaseModel):
-    url: HttpUrl
+    spotify_link: str
+
 
 class TrackData(BaseModel):
     artist: str
     title: str
 
+
 class SpotifyResolveResponse(BaseModel):
     is_playlist: bool
-    playlist_name: Optional[str] = None
-    tracks: List[TrackData]
+    playlist_name: str | None = None
+    tracks: list[TrackData]
