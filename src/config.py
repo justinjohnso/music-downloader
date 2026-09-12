@@ -56,6 +56,57 @@ def _patched_from_toml(cls, toml_str: str):
 
 streamrip.config.ConfigData.from_toml = _patched_from_toml
 
+# 2. Patch deezer client to respect quality setting when using encrypted fallback
+import streamrip.client.deezer
+
+def _patched_get_encrypted_file_url(self, meta_id: str, track_hash: str, media_version: str):
+    import inspect
+    import hashlib
+    import binascii
+    import logging
+    from Cryptodome.Cipher import AES
+
+    logger = logging.getLogger("streamrip")
+    logger.debug("Unable to fetch URL. Trying encryption method (MDL patched).")
+
+    format_number = 1
+    try:
+        frame = inspect.currentframe()
+        if frame is not None and frame.f_back is not None:
+            caller_locals = frame.f_back.f_locals
+            if "quality" in caller_locals and "quality_map" in caller_locals:
+                final_quality = caller_locals["quality"]
+                quality_map = caller_locals["quality_map"]
+                format_number, _ = quality_map[final_quality]
+    except Exception as e:
+        logger.debug(f"Failed to infer format_number from caller frame: {e}")
+
+    url_bytes = b"\xa4".join(
+        (
+            track_hash.encode(),
+            str(format_number).encode(),
+            str(meta_id).encode(),
+            str(media_version).encode(),
+        ),
+    )
+    url_hash = hashlib.md5(url_bytes).hexdigest()
+    info_bytes = bytearray(url_hash.encode())
+    info_bytes.extend(b"\xa4")
+    info_bytes.extend(url_bytes)
+    info_bytes.extend(b"\xa4")
+    # Pad the bytes so that len(info_bytes) % 16 == 0
+    padding_len = 16 - (len(info_bytes) % 16)
+    info_bytes.extend(b"." * padding_len)
+
+    path = binascii.hexlify(
+        AES.new(b"jo6aey6haid2Teih", AES.MODE_ECB).encrypt(info_bytes),
+    ).decode("utf-8")
+    url = f"https://e-cdns-proxy-{track_hash[0]}.dzcdn.net/mobile/1/{path}"
+    logger.debug("Encrypted file path %s", url)
+    return url
+
+streamrip.client.deezer.DeezerClient._get_encrypted_file_url = _patched_get_encrypted_file_url
+
 
 def _apply_progress_color_scheme() -> None:
     """Align streamrip progress display with music-downloader's CLI color scheme."""
@@ -355,11 +406,11 @@ def _apply_to_session(session, config_data: dict) -> None:
             # Streamrip/Deezer uses its own internal quality enum.
             # Map MDL values explicitly instead of passing them through directly.
             if mdl_quality == 1:
-                session.deezer.quality = 0
+                session.deezer.quality = 1
             elif mdl_quality == 2:
                 session.deezer.quality = 2
             else:
-                session.deezer.quality = 0
+                session.deezer.quality = 1
 
         if deezer.get("lower_quality_if_not_available") is not None:
             session.deezer.lower_quality_if_not_available = deezer[

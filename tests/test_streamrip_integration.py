@@ -37,6 +37,30 @@ def test_streamrip_config_constructs_without_error(tmp_config_dir, tmp_path):
     assert config.session.deezer.arl == "TESTARL"
 
 
+def test_apply_config_overrides_maps_deezer_quality(tmp_path):
+    """apply_config_overrides must correctly map mdl quality to streamrip quality."""
+    from streamrip.config import Config, set_user_defaults
+    from src.config import apply_config_overrides
+
+    sr_config_path = tmp_path / "streamrip" / "config.toml"
+    sr_config_path.parent.mkdir(parents=True, exist_ok=True)
+    set_user_defaults(str(sr_config_path))
+
+    config = Config(str(sr_config_path))
+
+    # Test mapping 1 -> 1
+    apply_config_overrides(config, {"deezer": {"quality": 1}})
+    assert config.session.deezer.quality == 1
+
+    # Test mapping 2 -> 2
+    apply_config_overrides(config, {"deezer": {"quality": 2}})
+    assert config.session.deezer.quality == 2
+
+    # Test fallback to 1
+    apply_config_overrides(config, {"deezer": {"quality": 999}})
+    assert config.session.deezer.quality == 1
+
+
 def test_apply_config_overrides_expands_tilde(tmp_path):
     """apply_config_overrides must expand ~ in database path values."""
     from streamrip.config import Config, set_user_defaults
