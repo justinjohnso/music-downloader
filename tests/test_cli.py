@@ -55,3 +55,54 @@ def test_gui_entrypoints_dispatch_to_launcher(monkeypatch, entrypoint: str) -> N
     else:
         downloader.main_gui()
     launcher.assert_called_once_with()
+
+
+def test_selection_prompt_retries_and_skips(monkeypatch):
+    from src.downloader import _prompt_for_candidate
+
+    candidate = {"artist": "Artist", "title": "Track", "album": "Album"}
+    answers = iter(["bad", "2", "1"])
+    monkeypatch.setattr("builtins.input", lambda *_: next(answers))
+    assert _prompt_for_candidate("query", [candidate]) == 0
+    monkeypatch.setattr("builtins.input", lambda *_: "s")
+    assert _prompt_for_candidate("query", [candidate]) is None
+    monkeypatch.setattr("builtins.input", lambda *_: "q")
+    with pytest.raises(KeyboardInterrupt):
+        _prompt_for_candidate("query", [candidate])
+
+
+@pytest.mark.parametrize("flags", [[], ["--first-result"], ["--select"]])
+def test_download_defaults_remain_noninteractive(monkeypatch, flags):
+    from src import downloader
+    from unittest.mock import AsyncMock
+
+    download = AsyncMock()
+    monkeypatch.setattr(downloader, "download_track", download)
+    monkeypatch.setattr("src.config.load_config", lambda: {"deezer": {"arl": "test"}})
+    monkeypatch.setattr("src.config.ensure_mdl_config_complete", lambda: None)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(sys, "argv", ["mdl", *flags, "query"])
+    downloader.main()
+    assert download.call_args.kwargs["selection_callback"] is None
+    assert download.call_args.kwargs["result_limit"] == 10
+
+
+def test_search_lists_results_without_downloading(monkeypatch, capsys):
+    from src import downloader
+    from unittest.mock import AsyncMock
+
+    search = AsyncMock(
+        return_value=[{"artist": "Artist", "title": "Track", "album": "Album"}]
+    )
+    monkeypatch.setattr("src.search.search_track_candidates", search)
+    download = AsyncMock()
+    monkeypatch.setattr(downloader, "download_track", download)
+    monkeypatch.setattr("src.config.load_config", lambda: {"deezer": {"arl": "test"}})
+    monkeypatch.setattr("src.config.ensure_mdl_config_complete", lambda: None)
+    monkeypatch.setattr(
+        sys, "argv", ["mdl", "--search", "--result-limit", "3", "query"]
+    )
+    downloader.main()
+    assert "Album" in capsys.readouterr().out
+    download.assert_not_called()
+    assert search.call_args.kwargs["result_limit"] == 3

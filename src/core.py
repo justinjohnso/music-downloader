@@ -2,6 +2,11 @@ import os
 import asyncio
 import sys
 from typing import Optional, List, Dict, Literal, Tuple
+from .search import (
+    SelectionCallback,
+    TrackCandidate,
+    search_track_candidates_with_client,
+)
 from streamrip.client import DeezerClient
 from streamrip.config import Config
 from streamrip.db import Database, Downloads, Failed, Dummy
@@ -24,6 +29,11 @@ async def download_track_with_client(
     db=None,
     verbose: bool = False,
     duplicate_mode: Literal["prompt", "skip", "redownload"] = "prompt",
+    *,
+    selection_callback: SelectionCallback | None = None,
+    result_limit: int = 10,
+    selected_candidate: TrackCandidate | None = None,
+    candidate_callback=None,
 ) -> Tuple[Literal["downloaded", "duplicate_skipped", "failed"], Optional[str]]:
     """
     Search for a track on Deezer using the provided client and download the first result.
@@ -39,24 +49,34 @@ async def download_track_with_client(
         Tuple of (status, track label)
     """
     try:
-        # Search for the track
         try:
-            results = await client.search(query=search_string, media_type="track")
+            candidates = (
+                [selected_candidate]
+                if selected_candidate is not None
+                else await search_track_candidates_with_client(
+                    client, search_string, result_limit
+                )
+            )
         except Exception as e:
-            print(f"Error during search: {e}")
+            print(f"Error during search: {str(e) or type(e).__name__}")
             return "failed", None
-
-        # Process search results
-        tracks = results
-        if isinstance(tracks, dict) and "data" in tracks:
-            tracks = tracks["data"]
-        if not tracks:
+        if not candidates:
             print(f"No tracks found for query: '{search_string}'")
             return "failed", None
-
-        track = tracks[0]
-        if isinstance(track, dict) and "data" in track:
-            track = track["data"][0]
+        selection = (
+            selection_callback(search_string, candidates, None)
+            if selection_callback
+            else 0
+        )
+        if selection is None:
+            return "duplicate_skipped", None
+        if not isinstance(selection, int) or not 0 <= selection < len(candidates):
+            print("Selected result index is out of range.")
+            return "failed", None
+        candidate = candidates[selection]
+        if candidate_callback is not None:
+            candidate_callback(candidate)
+        track = candidate["track"]
 
         # Extract track information
         track_id = track.get("id")
@@ -150,6 +170,9 @@ async def download_multiple_tracks(
     verbose: bool = False,
     is_playlist: bool = False,
     playlist_name: Optional[str] = None,
+    *,
+    selection_callback: SelectionCallback | None = None,
+    result_limit: int = 10,
 ) -> None:
     """
     Download multiple tracks from Deezer based on artist and title information.
@@ -221,6 +244,7 @@ async def download_multiple_tracks(
 
             print(f"\nProcessing track {i + 1}/{total_tracks}: {artist} - {title}")
 
+            chosen = []
             # Use the download function with shared client
             status, track_label = await download_track_with_client(
                 client,
@@ -229,6 +253,9 @@ async def download_multiple_tracks(
                 db,
                 verbose,
                 duplicate_mode="skip",
+                selection_callback=selection_callback,
+                result_limit=result_limit,
+                candidate_callback=chosen.append,
             )
 
             if status == "downloaded":
@@ -237,7 +264,11 @@ async def download_multiple_tracks(
                 duplicate_downloads += 1
                 if track_label:
                     duplicate_tracks.append(
-                        {"label": track_label, "search_string": search_string}
+                        {
+                            "label": track_label,
+                            "search_string": search_string,
+                            "candidate": chosen[0],
+                        }
                     )
             else:
                 failed_downloads += 1
@@ -266,6 +297,7 @@ async def download_multiple_tracks(
                     db,
                     verbose,
                     duplicate_mode="redownload",
+                    selected_candidate=track["candidate"],
                 )
                 if status == "downloaded":
                     redownload_successful += 1
@@ -305,15 +337,6 @@ async def download_multiple_tracks(
         if hasattr(client, "session") and client.session:
             try:
                 if not client.session.closed:
-                    # Cancel any pending requests
-                    for task in asyncio.all_tasks():
-                        if not task.done() and task != asyncio.current_task():
-                            task.cancel()
-                            try:
-                                await task
-                            except asyncio.CancelledError:
-                                pass
-
                     # Close the session
                     await client.session.close()
 
@@ -331,7 +354,13 @@ async def download_multiple_tracks(
 
 
 async def download_track(
-    search_string: str, config_path: str = None, verbose: bool = False
+    search_string: str,
+    config_path: str = None,
+    verbose: bool = False,
+    *,
+    selection_callback: SelectionCallback | None = None,
+    result_limit: int = 10,
+    selected_candidate: TrackCandidate | None = None,
 ) -> None:
     """
     Search for a track on Deezer using the provided search string and download the first result.
@@ -386,7 +415,14 @@ async def download_track(
 
         # Use the shared download function
         await download_track_with_client(
-            client, config, search_string, verbose=verbose, duplicate_mode="prompt"
+            client,
+            config,
+            search_string,
+            verbose=verbose,
+            duplicate_mode="prompt",
+            selection_callback=selection_callback,
+            result_limit=result_limit,
+            selected_candidate=selected_candidate,
         )
 
     finally:
@@ -394,15 +430,6 @@ async def download_track(
         if hasattr(client, "session") and client.session:
             try:
                 if not client.session.closed:
-                    # Cancel any pending requests
-                    for task in asyncio.all_tasks():
-                        if not task.done() and task != asyncio.current_task():
-                            task.cancel()
-                            try:
-                                await task
-                            except asyncio.CancelledError:
-                                pass
-
                     # Close the session
                     await client.session.close()
 
@@ -719,7 +746,12 @@ def _offer_duplicate_review_line_mode(
 
 
 async def process_spotify_link(
-    spotify_link: str, config_path: str = None, verbose: bool = False
+    spotify_link: str,
+    config_path: str = None,
+    verbose: bool = False,
+    *,
+    selection_callback: SelectionCallback | None = None,
+    result_limit: int = 10,
 ) -> None:
     """
     Process a Spotify link to download tracks.
@@ -749,7 +781,13 @@ async def process_spotify_link(
         # Download tracks
         playlist_name = info["name"] if info["is_playlist"] else None
         await download_multiple_tracks(
-            tracks, config_path, verbose, info["is_playlist"], playlist_name
+            tracks,
+            config_path,
+            verbose,
+            info["is_playlist"],
+            playlist_name,
+            selection_callback=selection_callback,
+            result_limit=result_limit,
         )
 
     except Exception as e:

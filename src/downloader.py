@@ -11,6 +11,35 @@ from .spotify import is_spotify_link
 from .core import process_spotify_link, download_track, sync_downloads_db_from_library
 
 
+def _positive_limit(value: str) -> int:
+    limit = int(value)
+    if limit < 1:
+        raise argparse.ArgumentTypeError("Result limit must be positive")
+    return limit
+
+
+def _prompt_for_candidate(query, candidates, source_track=None):
+    from .search import format_track_candidate
+
+    print(f"\nSearch results for: {query}")
+    for index, candidate in enumerate(candidates):
+        print(format_track_candidate(candidate, index))
+    while True:
+        try:
+            response = (
+                input(f"Choose [1-{len(candidates)}], s=skip, q=quit: ").strip().lower()
+            )
+        except EOFError:
+            return None
+        if response == "s":
+            return None
+        if response == "q":
+            raise KeyboardInterrupt
+        if response.isdigit() and 1 <= int(response) <= len(candidates):
+            return int(response) - 1
+        print("Enter a result number, s, or q.")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Download music tracks from Deezer using Streamrip."
@@ -40,7 +69,28 @@ def main():
         help="Update the Deezer ARL. Prompts interactively if no value provided.",
     )
 
+    matching = parser.add_mutually_exclusive_group()
+    matching.add_argument(
+        "--select", action="store_true", help="Choose a Deezer match interactively."
+    )
+    matching.add_argument(
+        "--first-result",
+        action="store_true",
+        help="Download the first match without selection (default).",
+    )
+    matching.add_argument(
+        "--search", action="store_true", help="List Deezer matches without downloading."
+    )
+    parser.add_argument(
+        "--result-limit",
+        type=_positive_limit,
+        default=10,
+        help="Maximum search matches to show (default: 10).",
+    )
     args = parser.parse_args()
+    if (args.select or args.search) and not args.input:
+        parser.error("--select and --search require input")
+    selector = _prompt_for_candidate if args.select and sys.stdin.isatty() else None
 
     if args.setup:
         from .config import run_setup_wizard
@@ -75,12 +125,31 @@ def main():
             sys.exit(1)
         ensure_mdl_config_complete()
 
-        if is_spotify_link(args.input):
+        if args.search:
+            import asyncio
+            from .search import search_track_candidates
+            from .search import format_track_candidate
+
+            for index, candidate in enumerate(
+                asyncio.run(
+                    search_track_candidates(args.input, result_limit=args.result_limit)
+                )
+            ):
+                print(format_track_candidate(candidate, index))
+        elif is_spotify_link(args.input):
             # Handle Spotify link
             import asyncio
 
             try:
-                asyncio.run(process_spotify_link(args.input, None, args.verbose))
+                asyncio.run(
+                    process_spotify_link(
+                        args.input,
+                        None,
+                        args.verbose,
+                        selection_callback=selector,
+                        result_limit=args.result_limit,
+                    )
+                )
             except KeyboardInterrupt:
                 print("\nOperation cancelled by user.")
         else:
@@ -88,7 +157,15 @@ def main():
             import asyncio
 
             try:
-                asyncio.run(download_track(args.input, None, args.verbose))
+                asyncio.run(
+                    download_track(
+                        args.input,
+                        None,
+                        args.verbose,
+                        selection_callback=selector,
+                        result_limit=args.result_limit,
+                    )
+                )
             except KeyboardInterrupt:
                 print("\nOperation cancelled by user.")
     else:
