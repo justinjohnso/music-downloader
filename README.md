@@ -103,7 +103,10 @@ Run `mdl --setup` to interactively configure:
    - Audio conversion codec
    - Filepath folder format
 
-Re-running setup is safe — it preserves any values you have manually edited in the file, only updating the keys you explicitly answer.
+Setup preserves existing mdl values and uses them as prompt defaults. Legacy migration retains custom keys and comments; declining migration keeps the legacy location.
+Customized streamrip files, including custom download/database paths, remain unchanged during setup. Mdl applies its own settings in memory for downloads.
+`mdl --set-arl` validates the credential, then updates only `deezer.arl` in both files. It does not repair the schema or copy unrelated settings.
+Config writes use private temporary files and atomic replacement. If the second ARL write fails, mdl restores the first file; a crash between writes can still leave different ARLs.
 
 ### Auto-repair
 

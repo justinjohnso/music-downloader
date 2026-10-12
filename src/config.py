@@ -12,15 +12,19 @@ _log = logging.getLogger("mdl")
 
 
 def _secure_write(path: Path, content: str) -> None:
-    """Atomically write *content* to *path*, then chmod 600 on POSIX."""
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding="utf-8")
-    os.replace(tmp, path)
-    if os.name == "posix":
-        try:
-            os.chmod(path, 0o600)
-        except Exception as err:
-            _log.warning("mdl: could not chmod 600 %s: %s", path, err)
+    """Replace a config atomically using a private same-directory temporary file."""
+    descriptor, temporary_path = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}."
+    )
+    temporary = Path(temporary_path)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as stream:
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 # --- Monkey-patch streamrip to handle outdated configs and missing fields ---
@@ -57,6 +61,18 @@ def _patched_from_toml(cls, toml_str: str):
 
 
 streamrip.config.ConfigData.from_toml = _patched_from_toml
+
+
+def _utf8_config_init(self, path: str) -> None:
+    import copy
+
+    self.path = path
+    with open(path, encoding="utf-8") as stream:
+        self.file = streamrip.config.ConfigData.from_toml(stream.read())
+    self.session = copy.deepcopy(self.file)
+
+
+streamrip.config.Config.__init__ = _utf8_config_init
 
 
 # 2. Patch deezer client to respect quality setting when using encrypted fallback
@@ -255,9 +271,9 @@ def load_config(verbose: bool = False) -> dict:
     return data
 
 
-def is_streamrip_config_customized() -> bool:
-    """Check if the user's streamrip config differs from the default template."""
-    config_path = Path(get_default_config_path())
+def is_streamrip_config_customized(config_path: str | Path | None = None) -> bool:
+    """Check the actual streamrip target against user-specific defaults."""
+    config_path = Path(config_path or get_default_config_path())
     if not config_path.exists():
         return False
 
@@ -277,13 +293,6 @@ def is_streamrip_config_customized() -> bool:
 
             # Remove volatile/absolute path keys before comparison
             for toml_obj in [default_toml, user_toml]:
-                if "downloads" in toml_obj and "folder" in toml_obj["downloads"]:
-                    del toml_obj["downloads"]["folder"]
-                if "database" in toml_obj:
-                    if "downloads_path" in toml_obj["database"]:
-                        del toml_obj["database"]["downloads_path"]
-                    if "failed_downloads_path" in toml_obj["database"]:
-                        del toml_obj["database"]["failed_downloads_path"]
                 if "misc" in toml_obj and "version" in toml_obj["misc"]:
                     del toml_obj["misc"]["version"]
 
@@ -303,18 +312,14 @@ def ensure_streamrip_config_exists() -> str:
         print(
             f"Streamrip config not found at {config_path}, creating default config..."
         )
-        try:
-            Path(config_path).parent.mkdir(parents=True, exist_ok=True)
-            from streamrip.config import set_user_defaults
+        Path(config_path).parent.mkdir(parents=True, exist_ok=True)
+        from streamrip.config import set_user_defaults
 
-            set_user_defaults(config_path)
-            print(f"Created default streamrip config at {config_path}")
-        except Exception as e:
-            print(f"Warning: Could not create default streamrip config: {e}")
-            try:
-                Path(config_path).touch()
-            except Exception:
-                pass
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            template = Path(temporary_dir) / "config.toml"
+            set_user_defaults(str(template))
+            _secure_write(Path(config_path), template.read_text())
+        print(f"Created default streamrip config at {config_path}")
 
     return config_path
 
@@ -334,6 +339,11 @@ def merge_mdl_config_into_streamrip(
 ) -> None:
     """Merge mdl-config.toml values into streamrip's config.toml on disk."""
     if not mdl_config_data:
+        return
+    if is_streamrip_config_customized(streamrip_config_path):
+        _log.info(
+            "mdl: preserving customized streamrip config at %s", streamrip_config_path
+        )
         return
 
     MERGE_SECTIONS = {
@@ -374,13 +384,12 @@ def merge_mdl_config_into_streamrip(
                     value = os.path.expanduser(value)
                 sr_config[sr_section][key] = value
 
-    with open(streamrip_config_path, "w", encoding="utf-8") as f:
-        f.write(tomlkit.dumps(sr_config))
+    _secure_write(Path(streamrip_config_path), tomlkit.dumps(sr_config))
 
 
 def apply_config_overrides(config: Config, config_data: dict) -> None:
     """Apply configuration overrides from mdl-config.toml to the streamrip config."""
-    is_custom = is_streamrip_config_customized()
+    is_custom = is_streamrip_config_customized(config.path)
     if is_custom:
         logging.getLogger("music-downloader").info(
             "Streamrip config has manual modifications. Using in-memory overrides from mdl-config.toml for this session."
@@ -394,7 +403,7 @@ def apply_config_overrides(config: Config, config_data: dict) -> None:
     if not is_custom:
         _apply_to_session(config.file, config_data)
         config.file.update_toml()
-        config.save_file()
+        _secure_write(Path(config.path), tomlkit.dumps(config.file.toml))
 
 
 def _apply_to_session(session, config_data: dict) -> None:
@@ -635,8 +644,7 @@ def _validate_deezer_arl(arl: str, verbose: bool = False):
     from streamrip.client import DeezerClient
     from streamrip.config import Config
 
-    sr_path = ensure_streamrip_config_exists()
-    config = Config(sr_path)
+    config = Config.defaults()
     config.session.deezer.arl = arl
     client = DeezerClient(config)
 
@@ -712,24 +720,29 @@ def set_arl(arl: str | None = None, *, verbose: bool = False) -> None:
             console.print(f"[dim red]{exc_detail}[/dim red]")
         sys.exit(1)
 
-    # Preserve all existing config values, only override arl
-    prompted = {
-        "arl": arl,
-        "quality": config_data.get("deezer", {}).get("quality", 1),
-        "folder": config_data.get("downloads", {}).get(
-            "folder", "~/Music/Music Downloader"
-        ),
-        "spotify_id": config_data.get("spotify", {}).get("client_id", ""),
-        "spotify_secret": config_data.get("spotify", {}).get("client_secret", ""),
-    }
+    original_mdl = config_path.read_bytes().decode("utf-8")
+    mdl_doc = tomlkit.parse(original_mdl)
+    sr_path = Path(get_default_config_path())
+    if sr_path.exists():
+        sr_doc = tomlkit.parse(sr_path.read_bytes().decode("utf-8"))
+    else:
+        from streamrip.config import set_user_defaults
 
-    _write_or_update_config(config_path, prompted)
-
-    sr_path = ensure_streamrip_config_exists()
-    merge_mdl_config_into_streamrip(
-        sr_path,
-        tomlkit.parse(config_path.read_text(encoding="utf-8")),
-    )
+        with tempfile.TemporaryDirectory() as temporary_dir:
+            template = Path(temporary_dir) / "config.toml"
+            set_user_defaults(str(template))
+            sr_doc = tomlkit.parse(template.read_text())
+    for document in (mdl_doc, sr_doc):
+        if "deezer" not in document:
+            document.add("deezer", tomlkit.table())
+        document["deezer"]["arl"] = arl
+    sr_path.parent.mkdir(parents=True, exist_ok=True)
+    _secure_write(config_path, tomlkit.dumps(mdl_doc))
+    try:
+        _secure_write(sr_path, tomlkit.dumps(sr_doc))
+    except Exception:
+        _secure_write(config_path, original_mdl)
+        raise
 
     console.print(f"[bold green]✓ ARL refreshed. Updated {config_path}[/bold green]")
 
@@ -884,8 +897,14 @@ def ensure_mdl_config_complete() -> None:
                         "~"
                     )  # sqlite does not expand ~; rewrite to absolute path
                 ):
-                    user_doc[section][key] = must_fill[k]
-                    parent = Path(must_fill[k]).parent
+                    existing_path = str(user_doc[section][key])
+                    repaired_path = (
+                        os.path.expanduser(existing_path)
+                        if existing_path
+                        else must_fill[k]
+                    )
+                    user_doc[section][key] = repaired_path
+                    parent = Path(repaired_path).parent
                     try:
                         parent.mkdir(parents=True, exist_ok=True)
                     except Exception:
@@ -930,6 +949,12 @@ def _write_or_update_config(
     # Merge into existing file — preserve user values, fill only missing
     user_doc = tomlkit.parse(path.read_text(encoding="utf-8"))
     defaults = copy.deepcopy(STREAMRIP_DEFAULTS)
+    if "conversions" in user_doc and "conversion" not in user_doc:
+        conversion = tomlkit.table()
+        for key, value in user_doc["conversions"].items():
+            conversion.add(key, copy.deepcopy(value))
+        user_doc.remove("conversions")
+        user_doc.add("conversion", conversion)
 
     db_path, failed_db_path = _default_database_paths()
     must_fill = {
@@ -956,6 +981,10 @@ def _write_or_update_config(
                 elif k in must_fill and not user_doc[section][key]:
                     user_doc[section][key] = must_fill[k]
                     changed.append(f"{section}.{key}")
+
+    for (section, key), fallback in must_fill.items():
+        value = str(user_doc[section][key])
+        user_doc[section][key] = os.path.expanduser(value) if value else fallback
 
     # Apply prompted overrides (explicit user input wins)
     user_doc["deezer"]["arl"] = prompted["arl"]
@@ -1010,7 +1039,11 @@ def run_setup_wizard() -> None:
 
         # Check for existing config to use as defaults
         existing_config, existing_path = load_config_with_path(verbose=True)
+        if "conversions" in existing_config and "conversion" not in existing_config:
+            existing_config["conversion"] = existing_config["conversions"]
         modern_path = _get_mdl_config_path()
+        target_path = modern_path
+        migrate_legacy = False
 
         # If legacy config exists but modern doesn't, offer migration
         if (
@@ -1024,12 +1057,16 @@ def run_setup_wizard() -> None:
             ):
                 try:
                     modern_path.parent.mkdir(parents=True, exist_ok=True)
+                    migrate_legacy = True
                     # We'll write the new one later, but let's note we're migrating
                     console.print(
                         "[green]✓ Values will be migrated to the new location.[/green]"
                     )
                 except Exception as e:
                     console.print(f"[red]Could not create directory:[/red] {e}")
+                    return
+            else:
+                target_path = Path(existing_path)
 
         # Set defaults based on existing config
         default_arl = existing_config.get("deezer", {}).get("arl", "")
@@ -1124,7 +1161,11 @@ def run_setup_wizard() -> None:
             advanced = {}
 
             console.print("\n[bold]Advanced: Downloads[/bold]")
-            _def_conc = str(STREAMRIP_DEFAULTS["downloads"]["concurrency"]).lower()
+            _def_conc = str(
+                existing_config.get("downloads", {}).get(
+                    "concurrency", STREAMRIP_DEFAULTS["downloads"]["concurrency"]
+                )
+            ).lower()
             conc_str = (
                 Prompt.ask(
                     "[cyan]Enable concurrency (true/false)[/cyan]",
@@ -1136,7 +1177,12 @@ def run_setup_wizard() -> None:
             if conc_str:
                 advanced.setdefault("downloads", {})["concurrency"] = conc_str == "true"
 
-            _def_mc = str(STREAMRIP_DEFAULTS["downloads"]["max_connections"])
+            _def_mc = str(
+                existing_config.get("downloads", {}).get(
+                    "max_connections",
+                    STREAMRIP_DEFAULTS["downloads"]["max_connections"],
+                )
+            )
             mc_str = Prompt.ask("[cyan]Max connections[/cyan]", default=_def_mc).strip()
             if mc_str:
                 try:
@@ -1191,7 +1237,9 @@ def run_setup_wizard() -> None:
             conv_enabled_str = (
                 Prompt.ask(
                     "[cyan]Enable audio conversion? (true/false)[/cyan]",
-                    default="false",
+                    default=str(
+                        existing_config.get("conversion", {}).get("enabled", False)
+                    ).lower(),
                 )
                 .strip()
                 .lower()
@@ -1203,12 +1251,16 @@ def run_setup_wizard() -> None:
                     codec = Prompt.ask(
                         "[cyan]Codec[/cyan]",
                         choices=["ALAC", "MP3", "FLAC", "OGG"],
-                        default="ALAC",
+                        default=existing_config.get("conversion", {}).get(
+                            "codec", "ALAC"
+                        ),
                     ).strip()
                     advanced.setdefault("conversion", {})["codec"] = codec
 
             console.print("\n[bold]Advanced: Filepaths[/bold]")
-            _def_ff = STREAMRIP_DEFAULTS["filepaths"]["folder_format"]
+            _def_ff = existing_config.get("filepaths", {}).get(
+                "folder_format", STREAMRIP_DEFAULTS["filepaths"]["folder_format"]
+            )
             ff = Prompt.ask("[cyan]Folder format[/cyan]", default=_def_ff).strip()
             if ff and ff != _def_ff:
                 advanced.setdefault("filepaths", {})["folder_format"] = ff
@@ -1225,19 +1277,28 @@ def run_setup_wizard() -> None:
         }
 
         try:
-            _write_or_update_config(modern_path, prompted, advanced=advanced)
+            if migrate_legacy:
+                _secure_write(
+                    target_path, Path(existing_path).read_text(encoding="utf-8")
+                )
+            try:
+                _write_or_update_config(target_path, prompted, advanced=advanced)
+            except Exception:
+                if migrate_legacy:
+                    target_path.unlink(missing_ok=True)
+                raise
 
             sr_path = ensure_streamrip_config_exists()
             merge_mdl_config_into_streamrip(
                 sr_path,
-                tomlkit.parse(modern_path.read_text(encoding="utf-8")),
+                tomlkit.parse(target_path.read_text(encoding="utf-8")),
             )
 
             console.print("\n[bold green]✓ Setup complete![/bold green]")
-            console.print(f"[dim]Config saved to:[/dim] [cyan]{modern_path}[/cyan]")
+            console.print(f"[dim]Config saved to:[/dim] [cyan]{target_path}[/cyan]")
 
             # If we migrated, suggest deleting the old one
-            if existing_path and Path(existing_path) != modern_path:
+            if migrate_legacy:
                 console.print(
                     f"\n[yellow]Legacy config still exists at {existing_path}[/yellow]"
                 )

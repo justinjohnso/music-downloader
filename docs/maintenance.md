@@ -70,9 +70,10 @@ Review stashes in isolation. Do not apply them over the integration candidate or
 Keep config paths, custom config values, and download databases unchanged.
 Keep the previous release available for rollback. A green mock test does not prove a live Spotify or Deezer request succeeds.
 
-An independent review found an existing limitation: `--setup` and `--set-arl` merge mdl values into streamrip without the customized-config safeguard.
-The parity candidate does not introduce or change this behavior. Users with independently customized streamrip configs need a backup before these commands.
-Do not use either command as an upgrade step. Repairing this separate config behavior needs focused preservation tests before a change.
+Setup preserves customized streamrip files, including path-only customizations. ARL refresh changes only the validated credential in both configs.
+Validation does not create config files. Migration preserves legacy keys/comments, and advanced prompts use current values.
+Private temporary files and atomic replacement protect each write. ARL refresh restores mdl after a second-write failure, but does not provide crash-safe two-file transactions.
+Do not run setup or ARL refresh as an application upgrade step.
 The review also found a Windows snapshot fixture mismatch. The candidate uses a POSIX fixture path for the POSIX snapshot, without weakening comparisons.
 
 ## PR #8 security and platform review
