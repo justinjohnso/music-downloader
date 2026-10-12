@@ -1032,7 +1032,7 @@ def run_setup_wizard() -> None:
         console.print(
             Panel.fit(
                 "[bold cyan]Music Downloader Setup[/bold cyan]",
-                subtitle="[dim]v1.0[/dim]",
+                subtitle="[dim]v0.1.0[/dim]",
                 border_style="blue",
             )
         )

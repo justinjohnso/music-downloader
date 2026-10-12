@@ -1,144 +1,132 @@
 # Music Downloader
 
-A Python CLI and GUI tool that extends [streamrip](https://github.com/nathom/streamrip) for downloading high-quality music tracks from Deezer (with Qobuz fallback) based on search queries or Spotify links.
+Python CLI and PyQt6 GUI for downloading from Deezer using search queries or Spotify track, playlist, and album links. Spotify supplies metadata; audio comes from Deezer through bundled [streamrip](https://github.com/nathom/streamrip).
 
-## Quick Start
+This early `0.1.0` release uses the first Deezer search match. It does not provide Qobuz fallback, interactive match selection, or a hosted Spotify backend.
 
-1. **Install pipx and Python 3** (if you don't have them):
-   - **macOS**:
-     ```bash
-     brew install pipx python
-     brew install jpeg-turbo pkgconf
-     ```
-   - **Windows**:
-     Install [Python 3.10+](https://www.python.org/downloads/).
-     You will also need the [Microsoft Visual C++ Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) to compile C-extensions like `cffi`.
-     Then install pipx:
-     ```cmd
-     py -m pip install --user pipx
-     py -m pipx ensurepath
-     ```
+## Installation
 
-1. **Clone and install**:
-   ```bash
-   git clone --recursive https://github.com/justinjohnso/music-downloader.git
-   cd music-downloader
-   pipx install .
-   ```
+Requires Python 3.10 or later and pipx. FFmpeg is required only when audio conversion is enabled.
 
-1. **Create Spotify Dev App** (if you're not using default creds):
-   
-   This is where you'll get your client ID & secret for the MDL setup. Use `http://127.0.0.1:8888/callback` as the redirect URI.
-   - Info: https://developer.spotify.com/documentation/web-api/concepts/apps
-   - Link: https://developer.spotify.com/
+On macOS:
 
-1. **Run the setup wizard** — it will walk you through Deezer login, download folder, and quality settings:
-   ```bash
-   mdl --setup
-   ```
+```bash
+brew install pipx python
+pipx ensurepath
+```
+
+On Windows, install Python and pipx:
+
+```powershell
+py -m pip install --user pipx
+py -m pipx ensurepath
+```
+
+Some pinned dependencies require compilation when a wheel is unavailable. Windows builds can require Visual C++ Build Tools.
+
+Clone with the streamrip submodule and install:
+
+```bash
+git clone --recursive https://github.com/justinjohnso/music-downloader.git
+cd music-downloader
+pipx install .
+mdl --setup
+```
+
+PyQt6 is installed with the application. Linux GUI users also need Qt system libraries, including `libegl1` and `libopengl0` on Debian/Ubuntu. Desktop requirements depend on the platform plugin; see [Qt Linux requirements](https://doc.qt.io/qt-6/linux-requirements.html). CLI commands do not import Qt.
 
 ## Usage
 
-### CLI
 ```bash
-# Search and download a track
 mdl "The Beatles - Hey Jude"
-
-# Download a Spotify track (requires Spotify credentials in config)
-mdl "https://open.spotify.com/track/..."
-
-# Download an entire Spotify playlist or album
-mdl "https://open.spotify.com/playlist/..."
-mdl "https://open.spotify.com/album/..."
-
-# Run with detailed output
+mdl "https://open.spotify.com/track/TRACK_ID"
+mdl "https://open.spotify.com/playlist/PLAYLIST_ID"
+mdl "spotify:album:ALBUM_ID"
 mdl --verbose "Artist - Track"
-
-# Sync downloads DB from your configured downloads/library folder
-mdl --sync-db
-
-# Sync downloads DB from a specific folder
-mdl --sync-db "/path/to/library/folder"
-
-# Quickly update an expired Deezer ARL without re-running full setup
-mdl --set-arl
-mdl --set-arl "YOUR_NEW_ARL_HERE"
-```
-
-### GUI
-On Linux, Qt also needs system graphics libraries. Debian/Ubuntu GUI installations need `libegl1` and `libopengl0`, plus the desktop platform dependencies listed in the [Qt Linux requirements](https://doc.qt.io/qt-6/linux-requirements.html).
-CLI commands do not load Qt and do not need these GUI libraries.
-
-Launch the graphical interface for a user-friendly experience:
-```bash
 mdl-gui
 ```
 
+Use Spotify IDs in place of the uppercase placeholders. URLs can include query parameters. Track, playlist, and album URIs are supported.
+
+Downloads require a valid Deezer ARL. FLAC also requires suitable account access and available source files. With quality fallback enabled, an unavailable FLAC file can fall back to MP3.
+
+Spotify track and album lookup uses app credentials. Playlist lookup first tries app credentials, then user OAuth for access-related failures. A private playlist must be accessible to the authenticated user. OAuth uses `http://127.0.0.1:8888/callback` and stores tokens at `~/.cache-music-downloader-spotify`.
+
+The application includes fallback Spotify app credentials, but their continued availability is not guaranteed. Configure your own app through the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/) and register that redirect URI.
+
+See the [complete command reference](docs/cli.md) for every flag, command precedence, and duplicate handling.
+
 ## Configuration
 
-### Config location
+Run `mdl --setup` for the ARL, download folder, quality, optional Spotify credentials, and selected advanced settings.
 
-`mdl-config.toml` is stored at the platform-appropriate application support directory:
+| Platform | Primary mdl config |
+| --- | --- |
+| macOS | `~/Library/Application Support/music-downloader/mdl-config.toml` |
+| Linux | `~/.config/music-downloader/mdl-config.toml` (or under `XDG_CONFIG_HOME`) |
+| Windows | `%APPDATA%/music-downloader/mdl-config.toml` |
 
-| Platform | Path |
-|----------|------|
-| macOS    | `~/Library/Application Support/music-downloader/mdl-config.toml` |
-| Linux    | `~/.config/music-downloader/mdl-config.toml` |
-| Windows  | `~/AppData/Roaming/music-downloader/mdl-config.toml` |
+CLI lookup checks the primary path, then `~/mdl-config.toml`, then `./mdl-config.toml`. Setup offers migration for a legacy file. Declining migration keeps that location.
 
-Legacy paths (`~/mdl-config.toml`, `./mdl-config.toml`) are still detected and a one-time migration prompt is shown. Run `mdl --setup` to move to the modern location.
+Setup writes all 15 streamrip sections plus `[spotify]`. Many sections are inherited for compatibility but are not used by mdl. The [complete config reference](docs/configuration.md) lists every key, default, and runtime limitation. Prefer editing TOML directly for list-valued or advanced settings.
 
-The file contains full streamrip configuration (all 15 sections) plus a `[spotify]` section. It is written with `chmod 600` on POSIX systems — keep it private as it holds your Deezer ARL.
+```toml
+[deezer]
+arl = "YOUR_ARL"
+quality = 1
+lower_quality_if_not_available = true
 
-### Setup wizard
+[spotify]
+client_id = "YOUR_CLIENT_ID"
+client_secret = "YOUR_CLIENT_SECRET"
+```
 
-Run `mdl --setup` to interactively configure:
-1. **Deezer ARL** (required) — validated on entry
-2. **Download folder**
-3. **Audio quality** — 320kbps MP3 or FLAC
-4. **Spotify credentials** (optional) — for resolving Spotify links
-5. **Advanced options** (optional, press Enter to skip each):
-   - Download concurrency and max connections
-   - Qobuz and Tidal credentials
-   - Audio conversion codec
-   - Filepath folder format
+This is a configuration fragment, not a complete file. Run setup first. `quality = 1` selects 320kbps MP3; `2` requests FLAC.
 
-Setup preserves existing mdl values and uses them as prompt defaults. Legacy migration retains custom keys and comments; declining migration keeps the legacy location.
-Customized streamrip files, including custom download/database paths, remain unchanged during setup. Mdl applies its own settings in memory for downloads.
-`mdl --set-arl` validates the credential, then updates only `deezer.arl` in both files. It does not repair the schema or copy unrelated settings.
-Config writes use private temporary files and atomic replacement. If the second ARL write fails, mdl restores the first file; a crash between writes can still leave different ARLs.
+### Preservation and credentials
+
+Setup retains existing mdl values and uses them as prompt defaults. Migration preserves custom keys and comments. Independently customized streamrip config files remain unchanged during setup and download overrides; mdl uses its own session settings.
+
+Refresh an ARL with the masked prompt:
+
+```bash
+mdl --set-arl
+```
+
+Refresh validates the credential before writing and changes only `deezer.arl` in both files. It does not repair the schema or copy other settings. ARLs can expire or be revoked; no fixed lifetime is guaranteed.
+
+CLI config writes use private temporary files and atomic replacement. On POSIX, these files have mode `600`. If the second ARL write fails, mdl attempts to restore the first file. A crash between writes can leave different credentials.
+
+The current GUI config editor uses a direct write, shows credential values, and converts list values to strings. Avoid using it to edit complex configs or while another process edits the file. These limitations do not apply to the CLI setup/ARL writers.
 
 ### Auto-repair
 
-On every `mdl` invocation, the tool silently checks that your config contains all required sections and keys. If anything is missing (e.g., after a streamrip schema update), it is filled in from defaults and logged at INFO level. No action required.
+Download commands, database sync, and bare `mdl` repair missing schema keys after finding a config. Setup runs repair after saving. Help, GUI entrypoints, and ARL refresh do not perform this repair.
 
-### Spotify Credentials
-To resolve Spotify links, you must provide your own API credentials in `mdl-config.toml`:
+Repair fills missing keys, renames legacy `[conversions]` when `[conversion]` is absent, and expands tilde-prefixed database paths without changing their destination. It does not validate all values or replace missing credentials. Missing download folders can remain empty; run setup to select a destination.
 
-```toml
-[spotify]
-client_id = "your-client-id"
-client_secret = "your-client-secret"
+## Download history and library sync
+
+Download history stores Deezer track IDs. Single-track duplicates can prompt for skip or redownload. Batch downloads initially skip duplicates, then offer review in an interactive terminal. Noninteractive runs skip duplicate review.
+
+```bash
+mdl --sync-db
+mdl --sync-db "/path/to/library"
 ```
-Get them from the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard/).
 
-### Deezer ARL
-To download from Deezer, you need an ARL cookie from your account. The setup wizard will ask for it and explain where to find it. ARLs expire every 3-4 months; when login fails, grab a fresh one and run `mdl --setup` again.
+Sync recursively reads lowercase `.mp3`, `.flac`, `.m4a`, and `.ogg` files. It resolves their tags on Deezer and adds matching IDs to the configured database. It requires title/artist tags and Deezer login. It does not change audio files or download tracks.
 
-## Troubleshooting
+## Known limits
 
-**"mdl: command not found"**
-- Ensure `pipx` is in your PATH. Try running `pipx ensurepath` and restarting your terminal.
+- Matching by artist/title can select a different recording or version. Tracks are processed sequentially.
+- Playlist metadata retains the matched Deezer album and track number; inherited playlist-tag options are inactive.
+- Current M3U output lists sorted `.mp3` files directly in the destination, including unrelated files. It excludes FLAC and nested folders, and does not preserve Spotify order.
+- Conversion deletes the original after success. The inherited `lossy_bitrate` option is not passed to the converter.
+- Some download failures are printed without a failing process exit code. Check output and resulting files when automating.
 
-**"Login failed" (Deezer)**
-- Your Deezer ARL has likely expired. Get a new one from the browser and update your config quickly via `mdl --set-arl` or re-run the full wizard via `mdl --setup`.
+## Updating
 
-**"Spotify API credentials not found"**
-- Ensure you have correctly set the `client_id` and `client_secret` in your `mdl-config.toml` from your Spotify Developer Application (https://developer.spotify.com/).
-
-## Updating an existing installation
-
-After a reviewed update reaches `main`, update the checkout and reinstall the application:
+For an installation made from this checkout:
 
 ```bash
 git pull --ff-only
@@ -147,11 +135,11 @@ pipx reinstall music-downloader
 mdl --help
 ```
 
-If Git reports divergent history, stop. Preserve local commits on a separate branch before integration.
-Do not rerun setup just to update the application. Existing config values and download databases remain in their current locations.
-PyQt6 is included in the application dependencies. The application uses its bundled streamrip code, not a separately installed streamrip package.
+If Git reports divergent history, stop and preserve local work before integration. Do not rerun setup merely to update the application. Updating does not require changing the library or credential config.
 
-## Development verification
+## Development
+
+Use an isolated environment with the project dependencies and Ruff installed:
 
 ```bash
 python -m pytest -ra
@@ -159,50 +147,28 @@ ruff check .
 ruff format --check .
 ```
 
-Ruff excludes vendored code. Application CI builds a wheel, checks dependencies, runs regressions, and exercises installed CLI and GUI entrypoints.
-The GUI smoke uses a temporary config and does not authenticate or download music.
-See [maintenance notes](docs/maintenance.md) for branch cleanup and release gates.
+CI builds a wheel, checks dependencies, and runs tests and installed CLI/GUI smoke on Linux, macOS, and Windows with Python 3.10 and 3.14. Ruff excludes vendored code. GUI smoke uses a temporary config without authentication or downloads.
 
-## Regenerating the Example Config
-
-`mdl-config-example.toml` is generated from the current setup wizard defaults. To update it after schema changes:
+Regenerate the example config with:
 
 ```bash
 python scripts/regen-example-config.py
 ```
 
-## Maintaining Vendored streamrip Overrides
+The generator uses the current platform's database paths. Review those paths before sharing the example. The example also retains upstream comments; consult the config reference for mdl-specific behavior.
 
-This project keeps `vendor/streamrip` as a submodule and stores local vendor edits as patch files so updates stay manageable.
+`vendor/streamrip` is pinned as a Git submodule. Existing patch helpers are documented in `vendor/streamrip-patches/README.md`. Do not apply a historical patch blindly to an already patched revision. Keep vendor changes separate and verify the schema and application tests.
 
-Use:
+Historical implementation notes live in `docs/ai/`; they are not user documentation or current release status.
 
-```bash
-# Export current local streamrip edits to a patch file
-./scripts/streamrip-overrides.sh export
+## Troubleshooting
 
-# Inspect patch/submodule state
-./scripts/streamrip-overrides.sh status
-
-# Check if patch applies cleanly to current submodule checkout
-./scripts/streamrip-overrides.sh check
-
-# Apply patch to a clean submodule working tree
-./scripts/streamrip-overrides.sh apply
-```
-
-Patch location:
-
-```text
-vendor/streamrip-patches/0001-local-overrides.patch
-```
-
-Recommended update flow:
-1. Update submodule to desired upstream revision.
-2. Run `./scripts/streamrip-overrides.sh check`.
-3. If clean, run `./scripts/streamrip-overrides.sh apply`.
-4. Re-run project verification (`ruff check .` and tests).
+- **Command not found:** run `pipx ensurepath`, then open a new terminal. Check for conflicting installations on your PATH.
+- **Deezer login failed:** obtain a valid ARL and run `mdl --set-arl`. Credential-free download fallback is not supported.
+- **Spotify access failure:** verify your app credentials, registered redirect URI, app/user access, and playlist permissions. Public access does not prove private-playlist access.
+- **Missing vendored config:** initialize the submodule with `git submodule update --init --recursive`, then reinstall.
+- **Conversion failed:** check FFmpeg availability and codec support. AAC requires the `libfdk_aac` encoder.
 
 ## License
 
-MIT
+The wrapper is MIT licensed. Bundled streamrip is GPL-3.0-only, and both license texts are included in distributions. Redistribution of the combined package must comply with the applicable GPL terms. This is not a blanket MIT grant for the vendored code.

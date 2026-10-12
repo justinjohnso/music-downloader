@@ -4,6 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 package-dir = {"" = "."}
+license-files = ["LICENSE", "vendor/streamrip/LICENSE"]
 
 [tool.setuptools.packages.find]
 include = ["src", "src.*", "vendor.streamrip.streamrip", "vendor.streamrip.streamrip.*"]
@@ -11,11 +12,11 @@ exclude = ["tests", "tests.*"]
 
 [project]
 name = "music-downloader"
-version = "1.0"
-description = "A Python CLI tool for downloading music from Deezer (with Qobuz fallback) based on search queries or Spotify links/URIs"
+version = "0.1.0"
+description = "A Python CLI and GUI for downloading music from Deezer using search queries or Spotify metadata"
 readme = "README.md"
 requires-python = "<4.0,>=3.10"
-license = "MIT"  # Use license field instead of classifier
+license = "MIT AND GPL-3.0-only"
 classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: OS Independent",
