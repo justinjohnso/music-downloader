@@ -190,7 +190,9 @@ async def download_multiple_tracks(
         try:
             await client.login()
         except AuthenticationError:
-            print("Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it.")
+            print(
+                "Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it."
+            )
             return
         except MissingCredentialsError:
             print("No Deezer ARL configured. Run 'mdl --setup' to add one.")
@@ -367,7 +369,9 @@ async def download_track(
         try:
             await client.login()
         except AuthenticationError:
-            print("Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it.")
+            print(
+                "Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it."
+            )
             return
         except MissingCredentialsError:
             print("No Deezer ARL configured. Run 'mdl --setup' to add one.")
@@ -794,7 +798,9 @@ def sync_downloads_db_from_library(
             try:
                 await client.login()
             except AuthenticationError:
-                print("Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it.")
+                print(
+                    "Deezer login failed — your ARL may be expired. Run 'mdl --set-arl' to update it."
+                )
                 return
             except MissingCredentialsError:
                 print("No Deezer ARL configured. Run 'mdl --setup' to add one.")

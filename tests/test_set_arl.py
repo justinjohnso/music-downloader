@@ -1,4 +1,5 @@
 """Tests for set_arl and related error-message helpers."""
+
 import warnings
 import pytest
 import tomlkit
@@ -129,8 +130,10 @@ def test_validate_deezer_arl_closes_session(monkeypatch):
 
     monkeypatch.setattr(sc, "ensure_streamrip_config_exists", lambda: "/fake/path")
 
-    with patch("streamrip.client.DeezerClient", FakeDeezerClient), \
-         patch("streamrip.config.Config", MagicMock(return_value=MagicMock())):
+    with (
+        patch("streamrip.client.DeezerClient", FakeDeezerClient),
+        patch("streamrip.config.Config", MagicMock(return_value=MagicMock())),
+    ):
         with warnings.catch_warnings(record=True) as caught:
             warnings.simplefilter("always")
             result = _validate_deezer_arl("BAD_ARL")

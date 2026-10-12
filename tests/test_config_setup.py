@@ -1,4 +1,5 @@
 """Tests for the setup wizard config writer."""
+
 import os
 import stat
 import tomlkit

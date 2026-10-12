@@ -1,4 +1,5 @@
 """Shared fixtures for the mdl test suite."""
+
 import pytest
 
 
@@ -17,11 +18,13 @@ def tmp_config_dir(tmp_path, monkeypatch):
 
     # Patch env vars before any streamrip import
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
 
     # Patch the helper functions in src.config
     import src.config as sc
+
     monkeypatch.setattr(sc, "_get_mdl_config_dir", lambda: config_dir)
     monkeypatch.setattr(sc, "_get_streamrip_data_dir", lambda: data_dir)
 

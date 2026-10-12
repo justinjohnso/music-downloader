@@ -1,7 +1,8 @@
 """Tests that guard against schema drift between streamrip and mdl."""
+
 import os
 import pytest
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from src.schema import iter_section_keys
 from src.config import _build_config_toml
@@ -104,7 +105,7 @@ def test_snapshot_default_config(monkeypatch):
     """
     import src.config as sc
 
-    fake_data = Path("/tmp/streamrip-snapshot-data")
+    fake_data = PurePosixPath("/tmp/streamrip-snapshot-data")
     monkeypatch.setattr(sc, "_get_streamrip_data_dir", lambda: fake_data)
 
     actual = _build_config_toml(

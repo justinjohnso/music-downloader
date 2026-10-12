@@ -4,6 +4,7 @@ import tempfile
 import logging
 from pathlib import Path
 import tomlkit
+import streamrip.client.deezer
 import streamrip.config
 from streamrip.config import Config
 
@@ -20,6 +21,7 @@ def _secure_write(path: Path, content: str) -> None:
             os.chmod(path, 0o600)
         except Exception as err:
             _log.warning("mdl: could not chmod 600 %s: %s", path, err)
+
 
 # --- Monkey-patch streamrip to handle outdated configs and missing fields ---
 # 1. Bypass OutdatedConfigError and auto-upgrade version
@@ -55,6 +57,61 @@ def _patched_from_toml(cls, toml_str: str):
 
 
 streamrip.config.ConfigData.from_toml = _patched_from_toml
+
+
+# 2. Patch deezer client to respect quality setting when using encrypted fallback
+def _patched_get_encrypted_file_url(
+    self, meta_id: str, track_hash: str, media_version: str
+):
+    import inspect
+    import hashlib
+    import binascii
+    import logging
+    from Cryptodome.Cipher import AES
+
+    logger = logging.getLogger("streamrip")
+    logger.debug("Unable to fetch URL. Trying encryption method (MDL patched).")
+
+    format_number = 1
+    try:
+        frame = inspect.currentframe()
+        if frame is not None and frame.f_back is not None:
+            caller_locals = frame.f_back.f_locals
+            if "quality" in caller_locals and "quality_map" in caller_locals:
+                final_quality = caller_locals["quality"]
+                quality_map = caller_locals["quality_map"]
+                format_number, _ = quality_map[final_quality]
+    except Exception as e:
+        logger.debug(f"Failed to infer format_number from caller frame: {e}")
+
+    url_bytes = b"\xa4".join(
+        (
+            track_hash.encode(),
+            str(format_number).encode(),
+            str(meta_id).encode(),
+            str(media_version).encode(),
+        ),
+    )
+    url_hash = hashlib.md5(url_bytes).hexdigest()
+    info_bytes = bytearray(url_hash.encode())
+    info_bytes.extend(b"\xa4")
+    info_bytes.extend(url_bytes)
+    info_bytes.extend(b"\xa4")
+    # Pad the bytes so that len(info_bytes) % 16 == 0
+    padding_len = 16 - (len(info_bytes) % 16)
+    info_bytes.extend(b"." * padding_len)
+
+    path = binascii.hexlify(
+        AES.new(b"jo6aey6haid2Teih", AES.MODE_ECB).encrypt(info_bytes),
+    ).decode("utf-8")
+    url = f"https://e-cdns-proxy-{track_hash[0]}.dzcdn.net/mobile/1/{path}"
+    logger.debug("Encrypted file path %s", url)
+    return url
+
+
+streamrip.client.deezer.DeezerClient._get_encrypted_file_url = (
+    _patched_get_encrypted_file_url
+)
 
 
 def _apply_progress_color_scheme() -> None:
@@ -355,11 +412,11 @@ def _apply_to_session(session, config_data: dict) -> None:
             # Streamrip/Deezer uses its own internal quality enum.
             # Map MDL values explicitly instead of passing them through directly.
             if mdl_quality == 1:
-                session.deezer.quality = 0
+                session.deezer.quality = 1
             elif mdl_quality == 2:
                 session.deezer.quality = 2
             else:
-                session.deezer.quality = 0
+                session.deezer.quality = 1
 
         if deezer.get("lower_quality_if_not_available") is not None:
             session.deezer.lower_quality_if_not_available = deezer[
@@ -509,13 +566,17 @@ def _apply_to_session(session, config_data: dict) -> None:
         if database.get("downloads_enabled") is not None:
             session.database.downloads_enabled = database["downloads_enabled"]
         if database.get("downloads_path") is not None:
-            session.database.downloads_path = os.path.expanduser(database["downloads_path"])
+            session.database.downloads_path = os.path.expanduser(
+                database["downloads_path"]
+            )
         if database.get("failed_downloads_enabled") is not None:
             session.database.failed_downloads_enabled = database[
                 "failed_downloads_enabled"
             ]
         if database.get("failed_downloads_path") is not None:
-            session.database.failed_downloads_path = os.path.expanduser(database["failed_downloads_path"])
+            session.database.failed_downloads_path = os.path.expanduser(
+                database["failed_downloads_path"]
+            )
 
     if "lastfm" in config_data:
         lastfm = config_data["lastfm"]
@@ -544,7 +605,9 @@ def _apply_to_session(session, config_data: dict) -> None:
 def _get_mdl_config_dir() -> Path:
     import appdirs
 
-    return Path(appdirs.user_config_dir("music-downloader", appauthor=False, roaming=True))
+    return Path(
+        appdirs.user_config_dir("music-downloader", appauthor=False, roaming=True)
+    )
 
 
 def _get_streamrip_data_dir() -> Path:
@@ -653,7 +716,9 @@ def set_arl(arl: str | None = None, *, verbose: bool = False) -> None:
     prompted = {
         "arl": arl,
         "quality": config_data.get("deezer", {}).get("quality", 1),
-        "folder": config_data.get("downloads", {}).get("folder", "~/Music/Music Downloader"),
+        "folder": config_data.get("downloads", {}).get(
+            "folder", "~/Music/Music Downloader"
+        ),
         "spotify_id": config_data.get("spotify", {}).get("client_id", ""),
         "spotify_secret": config_data.get("spotify", {}).get("client_secret", ""),
     }
@@ -717,11 +782,11 @@ def _build_config_toml(
     if spotify_id:
         spotify_table.add("client_id", spotify_id)
     else:
-        spotify_table.add(tomlkit.comment("client_id = \"\""))
+        spotify_table.add(tomlkit.comment('client_id = ""'))
     if spotify_secret:
         spotify_table.add("client_secret", spotify_secret)
     else:
-        spotify_table.add(tomlkit.comment("client_secret = \"\""))
+        spotify_table.add(tomlkit.comment('client_secret = ""'))
     doc.add("spotify", spotify_table)
 
     content = tomlkit.dumps(doc)
@@ -815,7 +880,9 @@ def ensure_mdl_config_complete() -> None:
                             pass
                 elif k in must_fill and (
                     not user_doc[section][key]
-                    or str(user_doc[section][key]).startswith("~")  # sqlite does not expand ~; rewrite to absolute path
+                    or str(user_doc[section][key]).startswith(
+                        "~"
+                    )  # sqlite does not expand ~; rewrite to absolute path
                 ):
                     user_doc[section][key] = must_fill[k]
                     parent = Path(must_fill[k]).parent
@@ -828,8 +895,8 @@ def ensure_mdl_config_complete() -> None:
     # Ensure [spotify] section exists
     if "spotify" not in user_doc:
         spotify_table = tomlkit.table()
-        spotify_table.add(tomlkit.comment("client_id = \"\""))
-        spotify_table.add(tomlkit.comment("client_secret = \"\""))
+        spotify_table.add(tomlkit.comment('client_id = ""'))
+        spotify_table.add(tomlkit.comment('client_secret = ""'))
         user_doc.add("spotify", spotify_table)
         changed.append("spotify")
 
@@ -916,8 +983,8 @@ def _write_or_update_config(
     # Ensure [spotify] section exists
     if "spotify" not in user_doc:
         spotify_table = tomlkit.table()
-        spotify_table.add(tomlkit.comment("client_id = \"\""))
-        spotify_table.add(tomlkit.comment("client_secret = \"\""))
+        spotify_table.add(tomlkit.comment('client_id = ""'))
+        spotify_table.add(tomlkit.comment('client_secret = ""'))
         user_doc.add("spotify", spotify_table)
 
     _secure_write(path, tomlkit.dumps(user_doc))
@@ -1058,30 +1125,40 @@ def run_setup_wizard() -> None:
 
             console.print("\n[bold]Advanced: Downloads[/bold]")
             _def_conc = str(STREAMRIP_DEFAULTS["downloads"]["concurrency"]).lower()
-            conc_str = Prompt.ask(
-                "[cyan]Enable concurrency (true/false)[/cyan]",
-                default=_def_conc,
-            ).strip().lower()
+            conc_str = (
+                Prompt.ask(
+                    "[cyan]Enable concurrency (true/false)[/cyan]",
+                    default=_def_conc,
+                )
+                .strip()
+                .lower()
+            )
             if conc_str:
                 advanced.setdefault("downloads", {})["concurrency"] = conc_str == "true"
 
             _def_mc = str(STREAMRIP_DEFAULTS["downloads"]["max_connections"])
-            mc_str = Prompt.ask(
-                "[cyan]Max connections[/cyan]", default=_def_mc
-            ).strip()
+            mc_str = Prompt.ask("[cyan]Max connections[/cyan]", default=_def_mc).strip()
             if mc_str:
                 try:
-                    advanced.setdefault("downloads", {})["max_connections"] = int(mc_str)
+                    advanced.setdefault("downloads", {})["max_connections"] = int(
+                        mc_str
+                    )
                 except ValueError:
                     pass
 
             console.print("\n[bold]Advanced: Qobuz[/bold]")
-            use_token_str = Prompt.ask(
-                "[cyan]Use auth token for Qobuz? (true/false, blank=skip)[/cyan]",
-                default="",
-            ).strip().lower()
+            use_token_str = (
+                Prompt.ask(
+                    "[cyan]Use auth token for Qobuz? (true/false, blank=skip)[/cyan]",
+                    default="",
+                )
+                .strip()
+                .lower()
+            )
             if use_token_str in ("true", "false"):
-                advanced.setdefault("qobuz", {})["use_auth_token"] = use_token_str == "true"
+                advanced.setdefault("qobuz", {})["use_auth_token"] = (
+                    use_token_str == "true"
+                )
                 qobuz_email = Prompt.ask(
                     "[cyan]Qobuz email or user ID (blank=skip)[/cyan]", default=""
                 ).strip()
@@ -1111,9 +1188,14 @@ def run_setup_wizard() -> None:
                 advanced.setdefault("tidal", {})["access_token"] = tidal_token
 
             console.print("\n[bold]Advanced: Conversion[/bold]")
-            conv_enabled_str = Prompt.ask(
-                "[cyan]Enable audio conversion? (true/false)[/cyan]", default="false"
-            ).strip().lower()
+            conv_enabled_str = (
+                Prompt.ask(
+                    "[cyan]Enable audio conversion? (true/false)[/cyan]",
+                    default="false",
+                )
+                .strip()
+                .lower()
+            )
             if conv_enabled_str in ("true", "false"):
                 conv_enabled = conv_enabled_str == "true"
                 advanced.setdefault("conversion", {})["enabled"] = conv_enabled
@@ -1127,9 +1209,7 @@ def run_setup_wizard() -> None:
 
             console.print("\n[bold]Advanced: Filepaths[/bold]")
             _def_ff = STREAMRIP_DEFAULTS["filepaths"]["folder_format"]
-            ff = Prompt.ask(
-                "[cyan]Folder format[/cyan]", default=_def_ff
-            ).strip()
+            ff = Prompt.ask("[cyan]Folder format[/cyan]", default=_def_ff).strip()
             if ff and ff != _def_ff:
                 advanced.setdefault("filepaths", {})["folder_format"] = ff
 

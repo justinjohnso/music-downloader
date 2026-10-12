@@ -145,6 +145,7 @@ def launch_gui():
 
     try:
         from src.config import _get_mdl_config_path
+
         config_path = _get_mdl_config_path()
         with open(config_path, "r", encoding="utf-8") as f:
             config = tomlkit.parse(f.read())
@@ -241,6 +242,7 @@ def launch_gui():
                 config[section_name][key] = widget.text()
         try:
             from src.config import _get_mdl_config_path
+
             config_path = _get_mdl_config_path()
             with open(config_path, "w", encoding="utf-8") as f:
                 tomlkit.dump(config, f)

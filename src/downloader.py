@@ -7,7 +7,6 @@ if sys.platform == "win32":
 
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-from .gui import launch_gui
 from .spotify import is_spotify_link
 from .core import process_spotify_link, download_track, sync_downloads_db_from_library
 
@@ -66,7 +65,7 @@ def main():
             verbose=args.verbose,
         )
     elif args.gui:
-        launch_gui()
+        main_gui()
     elif args.input:
         # Check if config exists before attempting a download
         from .config import load_config, ensure_mdl_config_complete
@@ -104,6 +103,8 @@ def main():
 
 
 def main_gui():
+    from .gui import launch_gui
+
     launch_gui()
 
 
