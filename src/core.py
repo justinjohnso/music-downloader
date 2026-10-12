@@ -86,7 +86,7 @@ async def download_track_with_client(
             print(_ok(f"Duplicate detected, re-downloading: {track_label}"))
             effective_db = Database(downloads=Dummy(), failed=db.failed)
 
-        download_folder = config.file.downloads.folder
+        download_folder = config.session.downloads.folder
 
         try:
             # Get album metadata
@@ -105,7 +105,7 @@ async def download_track_with_client(
                 client.session,
                 artwork_folder,
                 album.covers,
-                config.file.artwork,
+                config.session.artwork,
                 for_playlist=False,
             )
 
@@ -280,7 +280,7 @@ async def download_multiple_tracks(
 
         # Generate M3U playlist file for Spotify playlists
         if is_playlist and successful_downloads > 0 and playlist_name:
-            download_folder = config.file.downloads.folder
+            download_folder = config.session.downloads.folder
             # Sanitize playlist name for filename
             safe_name = "".join(
                 c for c in playlist_name if c.isalnum() or c in (" ", "-", "_")
@@ -782,7 +782,7 @@ def sync_downloads_db_from_library(
 
     db = _build_database_from_config(config)
 
-    target_path = library_path or config.file.downloads.folder
+    target_path = library_path or config.session.downloads.folder
     if target_path:
         target_path = os.path.expanduser(target_path)
 
