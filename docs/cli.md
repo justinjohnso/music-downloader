@@ -18,8 +18,9 @@ Applies to the current development checkout. The published `0.1.0` release does 
 | `--select` | Off | Choose a match before each download in an interactive terminal; redirected input keeps first-result behavior. |
 | `--first-result` | Off | Explicitly select current default first-result behavior. |
 | `--result-limit N` | `10` | Positive maximum number of candidates to list or select. |
+| `-c`, `--config PATH` | Default streamrip path | Explicit engine config for search/download commands. Mdl session overrides and custom-file preservation still apply. Not accepted with setup, ARL refresh, sync, or GUI. |
 
-Search, selection, and first-result flags are mutually exclusive. There is no mdl `--config`, `--no-db`, source-selection, or command-line quality flag. Disable history or change quality in TOML instead. Upstream `rip` flags are not mdl flags, and this package does not install a `rip` command.
+Search, selection, and first-result flags are mutually exclusive. There is no mdl `--no-db`, source-selection, or command-line quality flag. Disable history or change quality in TOML instead. Upstream `rip` flags are not mdl flags, and this package does not install a `rip` command.
 
 ## Dispatch precedence
 
