@@ -130,6 +130,33 @@ To download from Deezer, you need an ARL cookie from your account. The setup wiz
 **"Spotify API credentials not found"**
 - Ensure you have correctly set the `client_id` and `client_secret` in your `mdl-config.toml` from your Spotify Developer Application (https://developer.spotify.com/).
 
+## Updating an existing installation
+
+After a reviewed update reaches `main`, update the checkout and reinstall the application:
+
+```bash
+git pull --ff-only
+git submodule update --init --recursive
+pipx reinstall music-downloader
+mdl --help
+```
+
+If Git reports divergent history, stop. Preserve local commits on a separate branch before integration.
+Do not rerun setup just to update the application. Existing config values and download databases remain in their current locations.
+PyQt6 is included in the application dependencies. The application uses its bundled streamrip code, not a separately installed streamrip package.
+
+## Development verification
+
+```bash
+python -m pytest -ra
+ruff check .
+ruff format --check .
+```
+
+Ruff excludes vendored code. Application CI builds a wheel, checks dependencies, runs regressions, and exercises installed CLI and GUI entrypoints.
+The GUI smoke uses a temporary config and does not authenticate or download music.
+See [maintenance notes](docs/maintenance.md) for branch cleanup and release gates.
+
 ## Regenerating the Example Config
 
 `mdl-config-example.toml` is generated from the current setup wizard defaults. To update it after schema changes:

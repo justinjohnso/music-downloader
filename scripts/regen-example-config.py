@@ -4,6 +4,7 @@
 Usage:
     python scripts/regen-example-config.py
 """
+
 import os
 import sys
 from pathlib import Path
