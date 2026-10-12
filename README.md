@@ -66,6 +66,9 @@ mdl --set-arl "YOUR_NEW_ARL_HERE"
 ```
 
 ### GUI
+On Linux, Qt also needs system graphics libraries. Debian/Ubuntu GUI installations need `libegl1` and `libopengl0`, plus the desktop platform dependencies listed in the [Qt Linux requirements](https://doc.qt.io/qt-6/linux-requirements.html).
+CLI commands do not load Qt and do not need these GUI libraries.
+
 Launch the graphical interface for a user-friendly experience:
 ```bash
 mdl-gui

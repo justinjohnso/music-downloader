@@ -58,4 +58,11 @@ jobs:
           cd "$RUNNER_TEMP"
           mdl --help
           music-downloader --help
+      - name: Linux GUI runtime libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0
+      - name: Installed GUI smoke
+        shell: bash
+        run: |
+          cd "$RUNNER_TEMP"
           python "$GITHUB_WORKSPACE/scripts/smoke-installed.py"

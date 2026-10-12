@@ -75,6 +75,26 @@ The parity candidate does not introduce or change this behavior. Users with inde
 Do not use either command as an upgrade step. Repairing this separate config behavior needs focused preservation tests before a change.
 The review also found a Windows snapshot fixture mismatch. The candidate uses a POSIX fixture path for the POSIX snapshot, without weakening comparisons.
 
+## PR #8 security and platform review
+
+The CLI imports Qt only when a GUI entrypoint runs. Tests reject Qt imports for help, setup, and ARL dispatch.
+Linux CI exercises installed CLI commands before it installs GUI libraries, then runs the mandatory offscreen GUI smoke.
+
+Independent review compared the ECB URL encoder with bundled streamrip revision `095ec9fe0c1662b32b42e202d86dbc0159a94abf`.
+The encoded fields are track hash, selected format, track ID, and media version, plus an unkeyed checksum and padding.
+The fixed key is public in upstream source. This encoding does not provide secrecy, authenticity, or account authorization.
+ARLs, OAuth tokens, track tokens, user credentials, and audio payloads do not enter these bytes.
+HTTPS and server access enforcement remain separate. Changing cipher mode would break the upstream URL protocol.
+
+CodeQL alert #1 was dismissed as a scoped false positive after this review. Alert #2 was dismissed as used in tests.
+The test decodes synthetic metadata to check selected quality. CodeQL remains enabled, and no algorithm or scan rule was hidden or removed.
+Residual risks include reusable URL/debug metadata exposure, optional TLS-verification disabling, and the caller-frame quality dependency.
+These dismissals do not certify generic ECB or MD5 as secure encryption or authentication.
+
+Live download acceptance remains blocked until a public playlist, an accessible private playlist, and an authorized track are supplied.
+Run those checks with a temporary config and download directory. Do not copy or expose stored credentials in reports.
+A separate reviewer must approve the PR. The repository owner cannot self-approve an authored PR.
+
 ## Sources
 
 - Bundled streamrip revision: `095ec9fe0c1662b32b42e202d86dbc0159a94abf`.
