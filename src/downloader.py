@@ -69,6 +69,11 @@ def main():
         help="Update the Deezer ARL. Prompts interactively if no value provided.",
     )
 
+    parser.add_argument(
+        "-c",
+        "--config",
+        help="Use an explicit streamrip config for search/download commands; mdl session overrides still apply.",
+    )
     matching = parser.add_mutually_exclusive_group()
     matching.add_argument(
         "--select", action="store_true", help="Choose a Deezer match interactively."
@@ -90,6 +95,14 @@ def main():
     args = parser.parse_args()
     if (args.select or args.search) and not args.input:
         parser.error("--select and --search require input")
+    if args.config and (
+        args.setup
+        or args.set_arl is not None
+        or args.sync_db is not None
+        or args.gui
+        or not args.input
+    ):
+        parser.error("--config applies only to search/download commands")
     selector = _prompt_for_candidate if args.select and sys.stdin.isatty() else None
 
     if args.setup:
@@ -132,7 +145,11 @@ def main():
 
             for index, candidate in enumerate(
                 asyncio.run(
-                    search_track_candidates(args.input, result_limit=args.result_limit)
+                    search_track_candidates(
+                        args.input,
+                        config_path=args.config,
+                        result_limit=args.result_limit,
+                    )
                 )
             ):
                 print(format_track_candidate(candidate, index))
@@ -144,7 +161,7 @@ def main():
                 asyncio.run(
                     process_spotify_link(
                         args.input,
-                        None,
+                        args.config,
                         args.verbose,
                         selection_callback=selector,
                         result_limit=args.result_limit,
@@ -160,7 +177,7 @@ def main():
                 asyncio.run(
                     download_track(
                         args.input,
-                        None,
+                        args.config,
                         args.verbose,
                         selection_callback=selector,
                         result_limit=args.result_limit,

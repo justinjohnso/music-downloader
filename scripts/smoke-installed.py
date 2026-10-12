@@ -54,6 +54,7 @@ def main() -> None:
                 tabs = window.findChild(QTabWidget)
                 assert [tabs.tabText(index) for index in range(tabs.count())] == [
                     "Download",
+                    "Queue",
                     "Config",
                 ]
                 assert any(
@@ -73,7 +74,7 @@ def main() -> None:
             return original_exec()
 
         with (
-            patch("src.config._get_mdl_config_path", return_value=str(config_path)),
+            patch("src.config._get_mdl_config_path", return_value=config_path),
             patch.object(QApplication, "exec", timed_exec),
         ):
             try:

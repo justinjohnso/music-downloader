@@ -106,3 +106,18 @@ def test_search_lists_results_without_downloading(monkeypatch, capsys):
     assert "Album" in capsys.readouterr().out
     download.assert_not_called()
     assert search.call_args.kwargs["result_limit"] == 3
+
+
+def test_explicit_streamrip_config_is_forwarded(monkeypatch):
+    from src import downloader
+    from unittest.mock import AsyncMock
+
+    download = AsyncMock()
+    monkeypatch.setattr(downloader, "download_track", download)
+    monkeypatch.setattr("src.config.load_config", lambda: {"deezer": {"arl": "test"}})
+    monkeypatch.setattr("src.config.ensure_mdl_config_complete", lambda: None)
+    monkeypatch.setattr(
+        sys, "argv", ["mdl", "--config", "/custom/streamrip.toml", "query"]
+    )
+    downloader.main()
+    assert download.call_args.args[1] == "/custom/streamrip.toml"
