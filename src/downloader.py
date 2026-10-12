@@ -92,15 +92,45 @@ def main():
         default=10,
         help="Maximum search matches to show (default: 10).",
     )
+    parser.add_argument(
+        "--batch",
+        metavar="FILE",
+        help="UTF-8 file with one query or Spotify link per line.",
+    )
+    parser.add_argument(
+        "--retries", type=int, default=0, help="Retry failed queue items 0-10 times."
+    )
+    parser.add_argument(
+        "--retry-failed",
+        action="store_true",
+        help="Interactively retry or rematch failed queue items.",
+    )
+    parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable queue outcomes instead of download logs.",
+    )
     args = parser.parse_args()
-    if (args.select or args.search) and not args.input:
+    if not 0 <= args.retries <= 10:
+        parser.error("--retries must be between 0 and 10")
+    if args.batch and args.input:
+        parser.error("Use either --batch or positional input")
+    if args.search and (args.batch or args.json or args.retry_failed or args.retries):
+        parser.error("Queue options cannot be combined with --search")
+    if args.json and (args.select or args.retry_failed):
+        parser.error("--json cannot be combined with interactive selection or retry")
+    if (args.batch or args.json or args.retry_failed or args.retries) and (
+        args.setup or args.set_arl is not None or args.sync_db is not None or args.gui
+    ):
+        parser.error("Queue options apply only to downloads")
+    if (args.select or args.search) and not (args.input or args.batch):
         parser.error("--select and --search require input")
     if args.config and (
         args.setup
         or args.set_arl is not None
         or args.sync_db is not None
         or args.gui
-        or not args.input
+        or not (args.input or args.batch)
     ):
         parser.error("--config applies only to search/download commands")
     selector = _prompt_for_candidate if args.select and sys.stdin.isatty() else None
@@ -129,6 +159,98 @@ def main():
         )
     elif args.gui:
         main_gui()
+    elif args.batch or args.json or args.retry_failed or args.retries:
+        import asyncio
+        import contextlib
+        import io
+        import json
+        from pathlib import Path
+        from .workflow import expand_input, run_queue
+        from .config import load_config, ensure_mdl_config_complete
+
+        if not args.input and not args.batch:
+            parser.error("Queue options require input or --batch")
+        with (
+            contextlib.redirect_stdout(sys.stderr)
+            if args.json
+            else contextlib.nullcontext()
+        ):
+            if not load_config():
+                parser.error("No config found. Run mdl --setup")
+            ensure_mdl_config_complete()
+        values = (
+            [
+                line.strip()
+                for line in Path(args.batch).read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+            if args.batch
+            else [args.input]
+        )
+
+        async def queued():
+            items = []
+            for value in values:
+                items.extend(await expand_input(value))
+            results = await run_queue(
+                items,
+                retries=args.retries,
+                config_path=args.config,
+                selection_callback=selector,
+                result_limit=args.result_limit,
+                verbose=args.verbose,
+            )
+            if args.retry_failed and sys.stdin.isatty():
+                for index, outcome in enumerate(results):
+                    if outcome.status != "failed":
+                        continue
+                    try:
+                        action = (
+                            input(
+                                f"Failed {outcome.query}: r=retry, m=rematch, s=skip: "
+                            )
+                            .strip()
+                            .lower()
+                        )
+                    except EOFError:
+                        break
+                    if action in ("r", "m"):
+                        results[index] = (
+                            await run_queue(
+                                [
+                                    {
+                                        "query": items[index]["query"],
+                                        "candidate": outcome.candidate
+                                        if action == "r"
+                                        else None,
+                                    }
+                                ],
+                                config_path=args.config,
+                                selection_callback=_prompt_for_candidate
+                                if action == "m"
+                                else None,
+                                result_limit=args.result_limit,
+                                verbose=args.verbose,
+                            )
+                        )[0]
+            return results
+
+        try:
+            with (
+                contextlib.redirect_stdout(io.StringIO())
+                if args.json
+                else contextlib.nullcontext()
+            ):
+                outcomes = asyncio.run(queued())
+        except KeyboardInterrupt:
+            raise SystemExit(130)
+        if args.json:
+            print(json.dumps([outcome.to_dict() for outcome in outcomes]))
+        else:
+            for outcome in outcomes:
+                print(f"{outcome.status}: {outcome.query} ({outcome.message})")
+        if any(outcome.status == "failed" for outcome in outcomes):
+            raise SystemExit(1)
     elif args.input:
         # Check if config exists before attempting a download
         from .config import load_config, ensure_mdl_config_complete

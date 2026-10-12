@@ -114,3 +114,41 @@ def test_replace_queue_match_updates_identity_and_status(window):
     assert widget.queue_items[0]["candidate"]["id"] == "7"
     assert widget.queue_items[0]["status"] == "Pending"
     assert "Rematch" in widget.queue_table.item(0, 0).text()
+
+
+def test_gui_config_picker_and_worker_share_queue_options(window, monkeypatch):
+    from src.gui import Worker
+    from unittest.mock import AsyncMock
+    import asyncio
+    from src.workflow import DownloadOutcome
+
+    widget, _ = window
+    monkeypatch.setattr(
+        "src.gui.QFileDialog.getOpenFileName", lambda *args: ("/custom/engine.toml", "")
+    )
+    widget.choose_engine_config()
+    assert widget.engine_config_path == "/custom/engine.toml"
+    queue = AsyncMock(return_value=[DownloadOutcome("query", "skipped", "Duplicate")])
+    monkeypatch.setattr("src.gui.run_queue", queue)
+    worker = Worker(
+        "download",
+        "query",
+        candidate=candidate(),
+        engine_config_path=widget.engine_config_path,
+        retries=2,
+    )
+    assert asyncio.run(worker.execute()) is True
+    assert queue.call_args.kwargs["config_path"] == "/custom/engine.toml"
+    assert queue.call_args.kwargs["retries"] == 2
+
+
+def test_gui_batch_keeps_all_outcomes(window):
+    widget, _ = window
+    widget.show_candidates([candidate()])
+    widget.results.topLevelItem(0).setSelected(True)
+    widget.queue_selected()
+    widget.active_row = 0
+    widget.record_outcome({"status": "failed", "query": "first"})
+    widget.record_outcome({"status": "downloaded", "query": "second"})
+    assert widget.queue_items[0]["status"] == "failed"
+    assert len(widget.queue_items[0]["outcomes"]) == 2

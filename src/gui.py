@@ -42,10 +42,7 @@ from .config import (
     _write_or_update_config,
     _validate_deezer_arl,
 )
-from .core import (
-    download_track_with_client,
-    _build_database_from_config,
-)
+from .workflow import run_queue
 from .search import search_track_candidates, format_track_candidate
 from .spotify import is_spotify_link, get_spotify_tracks
 
@@ -66,6 +63,7 @@ class Worker(QThread):
     progress = pyqtSignal(str)
     candidates = pyqtSignal(list)
     completed = pyqtSignal(bool, str)
+    outcome = pyqtSignal(dict)
 
     def __init__(
         self,
@@ -74,6 +72,8 @@ class Worker(QThread):
         verbose: bool = False,
         candidate: dict | None = None,
         limit: int = 10,
+        engine_config_path: str | None = None,
+        retries: int = 0,
     ) -> None:
         super().__init__()
         self.mode, self.query, self.verbose, self.candidate, self.limit = (
@@ -83,6 +83,8 @@ class Worker(QThread):
             candidate,
             limit,
         )
+        self.engine_config_path = engine_config_path
+        self.retries = retries
         self.loop = None
         self.task = None
         self.cancel_requested = False
@@ -98,43 +100,44 @@ class Worker(QThread):
                 matches = []
                 for track in tracks:
                     found = await search_track_candidates(
-                        f"{track['artist']} {track['title']}", result_limit=1
+                        f"{track['artist']} {track['title']}",
+                        config_path=self.engine_config_path,
+                        result_limit=1,
                     )
                     matches.extend(found)
                 self.candidates.emit(matches)
             else:
                 self.candidates.emit(
-                    await search_track_candidates(self.query, result_limit=self.limit)
+                    await search_track_candidates(
+                        self.query,
+                        config_path=self.engine_config_path,
+                        result_limit=self.limit,
+                    )
                 )
         elif self.candidate is not None:
-            from .config import (
-                Config,
-                ensure_streamrip_config_exists,
-                apply_config_overrides,
-                load_config,
+            results = await run_queue(
+                [{"query": self.query, "candidate": self.candidate}],
+                config_path=self.engine_config_path,
+                retries=self.retries,
+                verbose=self.verbose,
+                outcome_callback=lambda result: self.outcome.emit(result.to_dict()),
             )
-            from streamrip.client import DeezerClient
+            return results[0].status in ("downloaded", "skipped")
+        elif self.mode == "download":
+            from .workflow import expand_input
 
-            config = Config(ensure_streamrip_config_exists())
-            apply_config_overrides(config, load_config())
-            client = DeezerClient(config)
-            try:
-                await client.login()
-                status, _ = await download_track_with_client(
-                    client,
-                    config,
-                    self.query,
-                    db=_build_database_from_config(config),
-                    duplicate_mode="skip",
-                    selected_candidate=self.candidate,
-                )
-                return status in ("downloaded", "duplicate_skipped")
-            finally:
-                session = getattr(client, "session", None)
-                if session is not None and not session.closed:
-                    await session.close()
+            results = await run_queue(
+                await expand_input(self.query),
+                config_path=self.engine_config_path,
+                retries=self.retries,
+                verbose=self.verbose,
+                outcome_callback=lambda result: self.outcome.emit(result.to_dict()),
+            )
+            return bool(results) and all(
+                result.status in ("downloaded", "skipped") for result in results
+            )
         else:
-            raise ValueError("Search and select a match before downloading.")
+            raise ValueError("Unknown worker operation")
         return True
 
     def run(self) -> None:
@@ -202,6 +205,7 @@ class MainWindow(QWidget):
         self.original_values = {}
         _, detected = load_config_with_path()
         self.config_path = Path(config_path or detected or _get_mdl_config_path())
+        self.engine_config_path = None
         self.setStyleSheet(
             "QWidget { background: #002b36; color: #eee8d5; font-size: 13px; } QLineEdit,QTextEdit,QTreeWidget,QTableWidget,QSpinBox { background: #073642; padding: 6px; } QPushButton { background: #2aa198; color: #002b36; padding: 8px 14px; border-radius: 4px; } QPushButton:disabled { background: #586e75; } QGroupBox { border: 1px solid #586e75; margin-top: 18px; padding: 12px; } QTreeWidget::item:selected { background: #268bd2; } "
         )
@@ -214,6 +218,11 @@ class MainWindow(QWidget):
             release_version = "development"
         heading = QLabel(f"MUSIC DOWNLOADER  {release_version}")
         layout.addWidget(heading)
+        engine_picker = QPushButton("Choose engine config")
+        engine_picker.clicked.connect(self.choose_engine_config)
+        layout.addWidget(engine_picker)
+        self.engine_label = QLabel("Default engine config")
+        layout.addWidget(self.engine_label)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs)
         download = QWidget()
@@ -230,6 +239,9 @@ class MainWindow(QWidget):
         self.limit = QSpinBox()
         self.limit.setRange(1, 200)
         self.limit.setValue(10)
+        self.retries = QSpinBox()
+        self.retries.setRange(0, 10)
+        self.retries.setPrefix("Retries: ")
         for widget in (
             self.search_button,
             self.download_button,
@@ -237,6 +249,7 @@ class MainWindow(QWidget):
             self.cancel_button,
             self.verbose,
             self.limit,
+            self.retries,
         ):
             buttons.addWidget(widget)
         controls.addLayout(buttons)
@@ -266,6 +279,12 @@ class MainWindow(QWidget):
         queue_layout.addWidget(self.queue_table)
         self.start_button = QPushButton("Start queue")
         queue_layout.addWidget(self.start_button)
+        batch = QPushButton("Import batch file")
+        batch.clicked.connect(self.import_batch)
+        queue_layout.addWidget(batch)
+        export = QPushButton("Export JSON results")
+        export.clicked.connect(self.export_results)
+        queue_layout.addWidget(export)
         self.retry_button = QPushButton("Retry selected")
         self.retry_button.clicked.connect(self.retry_selected)
         queue_layout.addWidget(self.retry_button)
@@ -517,16 +536,96 @@ class MainWindow(QWidget):
         if self.worker is not None and self.worker.isRunning():
             return
         self.worker = Worker(
-            mode, query, self.verbose.isChecked(), candidate, self.limit.value()
+            mode,
+            query,
+            self.verbose.isChecked(),
+            candidate,
+            self.limit.value(),
+            self.engine_config_path,
+            self.retries.value(),
         )
         self.worker.progress.connect(self.log.append)
         self.worker.candidates.connect(self.show_candidates)
         self.worker.completed.connect(self.worker_completed)
+        self.worker.outcome.connect(self.record_outcome)
         self.worker.finished.connect(self.queue_after_worker)
         self.start_button.setEnabled(False)
         self.search_button.setEnabled(False)
         self.download_button.setEnabled(False)
         self.worker.start()
+
+    def import_batch(self) -> None:
+        if self.worker is not None and self.worker.isRunning():
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Batch file", "", "Text files (*.txt)"
+        )
+        if not path:
+            return
+        try:
+            values = [
+                line.strip()
+                for line in Path(path).read_text(encoding="utf-8").splitlines()
+                if line.strip() and not line.lstrip().startswith("#")
+            ]
+            for value in values:
+                self.queue_items.append({"query": value, "status": "Pending"})
+                row = self.queue_table.rowCount()
+                self.queue_table.insertRow(row)
+                self.queue_table.setItem(row, 0, QTableWidgetItem(value))
+                self.queue_table.setItem(row, 1, QTableWidgetItem("Pending"))
+                progress = QProgressBar()
+                progress.setRange(0, 100)
+                self.queue_table.setCellWidget(row, 2, progress)
+        except Exception as error:
+            self.log.append(f"Batch import failed: {error}")
+
+    def export_results(self) -> None:
+        import json
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Queue results", "results.json", "JSON files (*.json)"
+        )
+        if path:
+            try:
+                _secure_write(
+                    Path(path),
+                    json.dumps(
+                        [
+                            outcome
+                            for item in self.queue_items
+                            for outcome in item.get("outcomes", [])
+                        ],
+                        indent=2,
+                    ),
+                )
+            except Exception as error:
+                self.log.append(f"Result export failed: {error}")
+
+    def choose_engine_config(self) -> None:
+        if self.worker is not None and self.worker.isRunning():
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Streamrip config", "", "TOML files (*.toml)"
+        )
+        if path:
+            self.engine_config_path = path
+            self.engine_label.setText(path)
+
+    def record_outcome(self, outcome: dict) -> None:
+        if self.active_row is not None:
+            self.queue_items[self.active_row].setdefault("outcomes", []).append(outcome)
+            self.queue_items[self.active_row]["outcome"] = outcome
+            statuses = [
+                result["status"]
+                for result in self.queue_items[self.active_row]["outcomes"]
+            ]
+            self.queue_items[self.active_row]["status"] = (
+                "failed" if "failed" in statuses else outcome["status"]
+            )
+            self.queue_table.item(self.active_row, 1).setText(
+                self.queue_items[self.active_row]["status"]
+            )
 
     def search(self) -> None:
         if self.query.text().strip():
@@ -543,7 +642,8 @@ class MainWindow(QWidget):
     def queue_selected(self) -> None:
         for candidate in self.selected_candidates():
             if any(
-                item["candidate"]["id"] == candidate["id"] for item in self.queue_items
+                item.get("candidate", {}).get("id") == candidate["id"]
+                for item in self.queue_items
             ):
                 continue
             self.queue_items.append({"candidate": candidate, "status": "Pending"})
@@ -559,6 +659,8 @@ class MainWindow(QWidget):
             self.queue_table.setCellWidget(row, 2, progress)
 
     def replace_queue_candidate(self, row: int, candidate: dict) -> None:
+        self.queue_items[row].pop("outcome", None)
+        self.queue_items[row].pop("outcomes", None)
         self.queue_items[row]["candidate"] = candidate
         self.queue_items[row]["status"] = "Pending"
         self.queue_table.item(row, 0).setText(format_track_candidate(candidate))
@@ -571,7 +673,13 @@ class MainWindow(QWidget):
             return
         for selected in self.queue_table.selectionModel().selectedRows():
             row = selected.row()
-            self.replace_queue_candidate(row, self.queue_items[row]["candidate"])
+            self.queue_items[row].pop("outcome", None)
+            self.queue_items[row].pop("outcomes", None)
+            if "candidate" in self.queue_items[row]:
+                self.replace_queue_candidate(row, self.queue_items[row]["candidate"])
+            else:
+                self.queue_items[row]["status"] = "Pending"
+                self.queue_table.item(row, 1).setText("Pending")
 
     def rematch_selected(self) -> None:
         if self.worker is not None and self.worker.isRunning():
@@ -580,7 +688,10 @@ class MainWindow(QWidget):
         if not rows:
             return
         row = rows[0].row()
-        candidate = self.queue_items[row]["candidate"]
+        candidate = self.queue_items[row].get("candidate") or {
+            "artist": "",
+            "title": self.queue_items[row]["query"],
+        }
         dialog = WorkerDialog(self)
         dialog.setWindowTitle("Rematch track")
         layout = QVBoxLayout(dialog)
@@ -612,6 +723,7 @@ class MainWindow(QWidget):
                 query.text(),
                 self.verbose.isChecked(),
                 limit=self.limit.value(),
+                engine_config_path=self.engine_config_path,
             )
             dialog.worker = worker
             worker.setParent(dialog)
@@ -650,8 +762,10 @@ class MainWindow(QWidget):
                 self.queue_table.cellWidget(row, 2).setRange(0, 0)
                 self.start_worker(
                     "download",
-                    format_track_candidate(item["candidate"]),
-                    item["candidate"],
+                    format_track_candidate(item["candidate"])
+                    if "candidate" in item
+                    else item["query"],
+                    item.get("candidate"),
                 )
                 return
         self.queue_running = False
@@ -661,9 +775,10 @@ class MainWindow(QWidget):
         self.search_button.setEnabled(True)
         self.download_button.setEnabled(True)
         if self.active_row is not None:
-            self.queue_items[self.active_row]["status"] = (
-                "Finished" if success else "Failed"
-            )
+            if "outcome" not in self.queue_items[self.active_row]:
+                self.queue_items[self.active_row]["status"] = (
+                    "cancelled" if message == "Cancelled" else "failed"
+                )
             self.queue_table.item(self.active_row, 1).setText(
                 self.queue_items[self.active_row]["status"]
             )

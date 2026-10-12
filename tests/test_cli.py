@@ -121,3 +121,35 @@ def test_explicit_streamrip_config_is_forwarded(monkeypatch):
     )
     downloader.main()
     assert download.call_args.args[1] == "/custom/streamrip.toml"
+
+
+def test_batch_json_reports_failure_with_exit_status(monkeypatch, tmp_path, capsys):
+    import json
+    from unittest.mock import AsyncMock
+    from src import downloader
+    from src.workflow import DownloadOutcome
+
+    batch = tmp_path / "batch.txt"
+    batch.write_text("# ignored\nfirst\nsecond\n")
+    expand = AsyncMock(side_effect=[[{"query": "first"}], [{"query": "second"}]])
+    queue = AsyncMock(
+        return_value=[
+            DownloadOutcome("first", "downloaded"),
+            DownloadOutcome("second", "failed", "No match"),
+        ]
+    )
+    monkeypatch.setattr("src.workflow.expand_input", expand)
+    monkeypatch.setattr("src.workflow.run_queue", queue)
+    monkeypatch.setattr("src.config.load_config", lambda: {"deezer": {"arl": "test"}})
+    monkeypatch.setattr("src.config.ensure_mdl_config_complete", lambda: None)
+    monkeypatch.setattr(
+        sys, "argv", ["mdl", "--batch", str(batch), "--json", "--retries", "2"]
+    )
+    with pytest.raises(SystemExit) as error:
+        downloader.main()
+    assert error.value.code == 1
+    assert [item["status"] for item in json.loads(capsys.readouterr().out)] == [
+        "downloaded",
+        "failed",
+    ]
+    assert queue.call_args.kwargs["retries"] == 2

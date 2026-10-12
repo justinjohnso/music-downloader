@@ -22,6 +22,19 @@ Applies to the current development checkout. The published `0.1.0` release does 
 
 Search, selection, and first-result flags are mutually exclusive. There is no mdl `--no-db`, source-selection, or command-line quality flag. Disable history or change quality in TOML instead. Upstream `rip` flags are not mdl flags, and this package does not install a `rip` command.
 
+## Shared queue workflow
+
+`--batch FILE` reads UTF-8 queries or Spotify links, one per nonempty line; lines beginning with `#` are ignored. It cannot be combined with positional input.
+`--retries N` retries failed items 0-10 times. `--retry-failed` offers retry/rematch/skip in an interactive terminal. Retry retains the chosen candidate; rematch selects a different result.
+`--json` prints an array of per-item outcomes (`query`, `status`, `message`, `candidate_id`, `path`). Raw API candidates are not included. Queue failures exit 1; interrupted CLI execution exits 130. Legacy plain-download behavior remains unchanged.
+Queue options cannot be combined with search-only or setup/sync/GUI actions. JSON mode cannot prompt for selection/retry. Mdl and GUI share the queue item/outcome implementation; duplicate IDs are skipped rather than prompting inside a GUI worker.
+
+```bash
+mdl --batch tracks.txt --retries 1
+mdl --retry-failed "Artist Track"
+mdl --json "spotify:album:ALBUM_ID"
+```
+
 ## Dispatch precedence
 
 Avoid combining action flags. If combined, the implementation selects the first matching action:
