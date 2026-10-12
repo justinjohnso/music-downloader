@@ -120,7 +120,7 @@ Sync recursively reads lowercase `.mp3`, `.flac`, `.m4a`, and `.ogg` files. It r
 
 - Matching by artist/title can select a different recording or version. Tracks are processed sequentially.
 - Playlist metadata retains the matched Deezer album and track number; inherited playlist-tag options are inactive.
-- Current M3U output lists sorted `.mp3` files directly in the destination, including unrelated files. It excludes FLAC and nested folders, and does not preserve Spotify order.
+- The development checkout writes M3U entries from successful downloads in Spotify source order, including FLAC, converted files, and nested disc folders. Skipped duplicates and failed downloads are excluded; selected duplicate redownloads retain their original position. Published `0.1.0` retains the older MP3-only directory-scan behavior.
 - Conversion deletes the original after success. The inherited `lossy_bitrate` option is not passed to the converter.
 - Some download failures are printed without a failing process exit code. Check output and resulting files when automating.
 

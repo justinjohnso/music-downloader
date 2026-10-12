@@ -24,6 +24,8 @@ async def download_track_with_client(
     db=None,
     verbose: bool = False,
     duplicate_mode: Literal["prompt", "skip", "redownload"] = "prompt",
+    *,
+    downloaded_path_callback=None,
 ) -> Tuple[Literal["downloaded", "duplicate_skipped", "failed"], Optional[str]]:
     """
     Search for a track on Deezer using the provided client and download the first result.
@@ -134,6 +136,13 @@ async def download_track_with_client(
                 print(_warn(f"Track already downloaded, skipping: {track_label}"))
                 return "duplicate_skipped", track_label
             await resolved.rip()
+            output_path = getattr(resolved, "download_path", "")
+            if (
+                downloaded_path_callback is not None
+                and isinstance(output_path, str)
+                and os.path.isfile(output_path)
+            ):
+                downloaded_path_callback(output_path)
             print(f"Successfully downloaded '{title}' by {artist}")
             return "downloaded", track_label
         except Exception as e:
@@ -209,6 +218,7 @@ async def download_multiple_tracks(
         failed_downloads = 0
         duplicate_downloads = 0
         duplicate_tracks: List[Dict[str, str]] = []
+        downloaded_paths = {}
 
         total_tracks = len(tracks)
         print(f"Processing {total_tracks} tracks...")
@@ -229,6 +239,9 @@ async def download_multiple_tracks(
                 db,
                 verbose,
                 duplicate_mode="skip",
+                downloaded_path_callback=lambda path, position=i: (
+                    downloaded_paths.__setitem__(position, path)
+                ),
             )
 
             if status == "downloaded":
@@ -237,7 +250,11 @@ async def download_multiple_tracks(
                 duplicate_downloads += 1
                 if track_label:
                     duplicate_tracks.append(
-                        {"label": track_label, "search_string": search_string}
+                        {
+                            "label": track_label,
+                            "search_string": search_string,
+                            "position": i,
+                        }
                     )
             else:
                 failed_downloads += 1
@@ -266,6 +283,9 @@ async def download_multiple_tracks(
                     db,
                     verbose,
                     duplicate_mode="redownload",
+                    downloaded_path_callback=lambda path, position=track["position"]: (
+                        downloaded_paths.__setitem__(position, path)
+                    ),
                 )
                 if status == "downloaded":
                     redownload_successful += 1
@@ -279,24 +299,20 @@ async def download_multiple_tracks(
             )
 
         # Generate M3U playlist file for Spotify playlists
-        if is_playlist and successful_downloads > 0 and playlist_name:
-            download_folder = config.session.downloads.folder
-            # Sanitize playlist name for filename
-            safe_name = "".join(
-                c for c in playlist_name if c.isalnum() or c in (" ", "-", "_")
-            ).rstrip()
-            m3u_filename = f"{safe_name}.m3u"
-            m3u_path = os.path.join(download_folder, m3u_filename)
+        if is_playlist and downloaded_paths and playlist_name:
             try:
-                # List all .mp3 files in the download folder
-                mp3_files = [
-                    f for f in os.listdir(download_folder) if f.endswith(".mp3")
-                ]
-                mp3_files.sort()  # Sort for consistent order
-                with open(m3u_path, "w", encoding="utf-8") as f:
-                    for mp3 in mp3_files:
-                        f.write(f"{mp3}\n")
-                print(f"Generated M3U playlist '{playlist_name}' at: {m3u_path}")
+                from .playlists import write_playlist
+
+                m3u_path = write_playlist(
+                    config.session.downloads.folder,
+                    playlist_name,
+                    [
+                        downloaded_paths[position]
+                        for position in sorted(downloaded_paths)
+                    ],
+                )
+                if m3u_path is not None:
+                    print(f"Generated M3U playlist '{playlist_name}' at: {m3u_path}")
             except Exception as e:
                 print(f"Warning: Could not generate M3U playlist: {e}")
 
