@@ -2,7 +2,7 @@
 
 Python CLI and PyQt6 GUI for downloading from Deezer using search queries or Spotify track, playlist, and album links. Spotify supplies metadata; audio comes from Deezer through bundled [streamrip](https://github.com/nathom/streamrip).
 
-Downloads use the first Deezer match by default. The development checkout adds `mdl --search "Artist - Track"` to list matches and `--select` to choose one; these are not in published `0.1.0`. Qobuz fallback and a hosted Spotify backend are not provided.
+Bare Spotify/query input keeps existing download behavior. The development CLI adds verbs: `mdl download INPUT`, `mdl search "Artist - Track"`, `mdl setup`, `mdl auth refresh`, `mdl library sync`, and `mdl gui`. Search uses streamrip's interactive Deezer menu: Enter downloads selected results; Escape exits. These verbs are not in published `0.1.0`. Qobuz fallback and a hosted Spotify backend are not provided.
 
 ## Installation
 

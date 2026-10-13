@@ -702,6 +702,7 @@ def set_arl(arl: str | None = None, *, verbose: bool = False) -> None:
                 "[cyan]Paste your Deezer ARL[/cyan]",
                 default=default_arl,
                 password=True,
+                show_default=False,
             ).strip()
             if not arl:
                 console.print("[red]ARL is required.[/red]")
@@ -1093,6 +1094,7 @@ def run_setup_wizard() -> None:
                 "[cyan]Paste your Deezer ARL[/cyan]",
                 default=default_arl,
                 password=True,
+                show_default=False,
             ).strip()
             if not arl:
                 console.print("[red]ARL is required.[/red]")
@@ -1147,6 +1149,7 @@ def run_setup_wizard() -> None:
                 "[cyan]Spotify Client Secret[/cyan]",
                 default=spotify_secret,
                 password=True,
+                show_default=False,
             ).strip()
 
         # 5. Advanced options
@@ -1214,6 +1217,7 @@ def run_setup_wizard() -> None:
                     "[cyan]Qobuz password or token (blank=skip)[/cyan]",
                     default="",
                     password=True,
+                    show_default=False,
                 ).strip()
                 if qobuz_pass:
                     advanced.setdefault("qobuz", {})["password_or_token"] = qobuz_pass

@@ -1,95 +1,74 @@
 # Command reference
 
-Applies to the current development checkout. The published `0.1.0` release does not include the search/selection flags below. `mdl` and `music-downloader` call the same CLI entrypoint. `python -m src.downloader` is equivalent in a configured development environment. `mdl-gui` launches the GUI directly; it does not parse CLI flags.
+The development CLI uses verbs. Published `0.1.0` retains its older flag interface. `mdl` and `music-downloader` use the same entrypoint; `mdl-gui` launches the GUI directly.
 
-## Arguments and flags
+```text
+mdl [--verbose] [--config PATH] VERB [ARGUMENTS] [VERB FLAGS]
+mdl INPUT
+```
 
-| Argument | Default | Behavior |
+Bare input is a shorthand for the existing download behavior, including Spotify resolution, history, and duplicate review. Use `mdl download -- "search"` for a query that matches a reserved verb.
+
+## Commands
+
+| Command | Behavior | Flags |
 | --- | --- | --- |
-| `input` | Omitted | Optional search query or Spotify track/playlist/album URL or URI. Quote queries containing spaces. Without input or an action flag, mdl checks config, repairs it, and prints help. |
-| `-h`, `--help` | Off | Print argparse help and exit without config repair, login, or downloads. |
-| `-v`, `--verbose` | Off | Additional download/sync diagnostics. With `--set-arl`, include validation error details. Setup and GUI do not use this flag to change their interface. |
-| `--gui` | Off | Launch the Download/Config GUI. It bypasses CLI auto-repair. |
-| `--setup` | Off | Run the interactive setup wizard, save config, and run repair. It does not download the positional input. |
-| `--sync-db [PATH]` | Off | Scan a library and add matched Deezer IDs to download history. Without PATH, use `downloads.folder`. With PATH, use that path instead. No audio download or deletion. |
-| `--set-arl [ARL]` | Off | Validate and replace only the Deezer ARL in both configs. Without a value, prompt with masked input. Explicit values can appear in shell history/process arguments; prefer the prompt. |
+| `mdl download INPUT` | Existing Spotify/query matching and download workflow | `--batch FILE`, `--retries N`, `--retry-failed`, `--json` |
+| `mdl search QUERY` | Direct Deezer interactive search; Space selects, Enter authorizes downloads, Escape exits | `--type track\|album`, `--first`, `--output-file PATH`, `--num-results N` |
+| `mdl setup` | Existing config wizard | |
+| `mdl auth refresh [ARL]` | Validate/update only the Deezer ARL in both configs | Prefer omitting ARL for the masked prompt |
+| `mdl library sync [PATH]` | Record matching Deezer IDs from existing audio tags | |
+| `mdl gui` | Launch GUI | |
+| `mdl --help`, `mdl VERB --help` | Help without config writes or login | |
+| `mdl --version` | Package version | |
 
-| `--search` | Off | List Deezer matches without downloading audio. Requires a query. |
-| `--select` | Off | Choose a match before each download in an interactive terminal; redirected input keeps first-result behavior. |
-| `--first-result` | Off | Explicitly select current default first-result behavior. |
-| `--result-limit N` | `10` | Positive maximum number of candidates to list or select. |
-| `-c`, `--config PATH` | Default streamrip path | Explicit engine config for search/download commands. Mdl session overrides and custom-file preservation still apply. Not accepted with setup, ARL refresh, sync, or GUI. |
+`-v/--verbose` is accepted before or after the verb. `-c/--config PATH` selects an engine config for download/search; mdl session values still apply. It is not a mdl-config path override. Use one command per invocation.
 
-Search, selection, and first-result flags are mutually exclusive. There is no mdl `--no-db`, source-selection, or command-line quality flag. Disable history or change quality in TOML instead. Upstream `rip` flags are not mdl flags, and this package does not install a `rip` command.
-
-## Shared queue workflow
-
-`--batch FILE` reads UTF-8 queries or Spotify links, one per nonempty line; lines beginning with `#` are ignored. It cannot be combined with positional input.
-`--retries N` retries failed items 0-10 times. `--retry-failed` offers retry/rematch/skip in an interactive terminal. Retry retains the chosen candidate; rematch selects a different result.
-`--json` prints an array of per-item outcomes (`query`, `status`, `message`, `candidate_id`, `path`). Raw API candidates are not included. Queue failures exit 1; interrupted CLI execution exits 130. Legacy plain-download behavior remains unchanged.
-Queue options cannot be combined with search-only or setup/sync/GUI actions. JSON mode cannot prompt for selection/retry. Mdl and GUI share the queue item/outcome implementation; duplicate IDs are skipped rather than prompting inside a GUI worker.
+## Search
 
 ```bash
-mdl --batch tracks.txt --retries 1
-mdl --retry-failed "Artist Track"
-mdl --json "spotify:album:ALBUM_ID"
+mdl search "glitter jkyl"
+mdl search "Rumours" --type album
+mdl search "glitter jkyl" --num-results 10
+mdl search "glitter jkyl" --first
+mdl search "glitter jkyl" --output-file matches.json
 ```
 
-## Dispatch precedence
+Search uses the bundled streamrip menu and summaries, not an external `rip` executable. Deezer is implicit; tracks are the default type. Only tracks/albums are exposed. The adapter bounds results even though the pinned upstream interactive implementation ignores its own CLI limit.
 
-Avoid combining action flags. If combined, the implementation selects the first matching action:
+`-f/--first` authorizes downloading the first result without a menu. `-o/--output-file` writes upstream-format JSON and never downloads. These modes are mutually exclusive. `-n/--num-results` is a positive result limit, default 100. First mode requests one result.
 
-1. Help exits during argument parsing.
-2. `--setup`
-3. `--set-arl`
-4. `--sync-db`
-5. `--gui`
-6. Positional input
-7. Bare invocation
+Interactive search requires terminal input/output. Redirected/headless callers must choose first or export mode. Existing config files are read without upstream CLI initialization or automatic credential prompts; missing/invalid ARL produces setup/refresh guidance.
 
-An optional flag value consumes the next argument. For example, `mdl --sync-db PATH` treats PATH as the library directory, not a search query.
+Search selections use upstream single-track/album media handling. Album folders and source-folder options can differ from mdl's Spotify title-matching path. History still checks Deezer track IDs. Changing destination/quality does not invalidate history.
 
-## Examples
+## Downloads and queues
 
 ```bash
-mdl "Artist - Track"
-mdl -v "Artist - Track"
-mdl "https://open.spotify.com/track/TRACK_ID"
-mdl "https://open.spotify.com/playlist/PLAYLIST_ID?si=SHARE_ID"
-mdl "https://open.spotify.com/album/ALBUM_ID"
-mdl "spotify:track:TRACK_ID"
-mdl "spotify:playlist:PLAYLIST_ID"
-mdl "spotify:album:ALBUM_ID"
-mdl --setup
-mdl --set-arl
-mdl --sync-db
-mdl --sync-db "/path/to/library"
-mdl --gui
-mdl-gui
+mdl "https://open.spotify.com/playlist/PLAYLIST_ID"
+mdl download "spotify:album:ALBUM_ID"
+mdl download "Artist - Track"
+mdl download --batch tracks.txt --retries 1
+mdl download "Artist Track" --retry-failed
+mdl download "spotify:album:ALBUM_ID" --json
 ```
 
-Uppercase IDs are placeholders. Spotify share-query parameters are ignored when extracting the item ID.
+Bare and plain `download` preserve the existing first-match behavior. Spotify supplies artist/title metadata, then mdl searches Deezer. It does not guarantee the same recording as the Spotify ID.
 
-## Download behavior
+`--batch FILE` reads UTF-8 queries or Spotify links, one per nonempty line. Lines starting with `#` are ignored. Batch input and positional input are mutually exclusive.
 
-Search returns the first Deezer result. Spotify input resolves artist/title metadata, then performs the same Deezer matching for each track. The supplied Spotify ID does not establish an exact Deezer match.
+`--retries N` retries failed queue items 0-10 times, retaining the chosen match. `--retry-failed` offers retry/rematch/skip in a terminal; rematch explicitly chooses a replacement. JSON mode cannot use interactive retry.
 
-Downloads use `downloads.folder` and `deezer.quality` from the mdl session config. A valid ARL is required. Tracks are processed sequentially; batch processing pauses between initial tracks.
+`--json` emits per-track `query`, `status`, `message`, `candidate_id`, and `path`. Raw candidate payloads are not emitted. Queue modes skip duplicates without opening duplicate-review prompts. Failures exit 1; Ctrl+C exits 130. Legacy plain downloads can still report failures only in text, so inspect their summaries.
 
-With download history enabled, a single-track request can prompt to skip or redownload a duplicate. Batch requests initially skip duplicates, then offer selection for redownload in an interactive terminal. Noninteractive execution skips the review. Use `--select` for match selection, `s` to skip, or `q` to cancel. EOF skips selection. Search-only queries can retry without the artist/title separator if no matches are found.
+## Maintenance
 
-Track and album links use Spotify app credentials. Playlist retrieval first uses app credentials, then retries with user authentication on HTTP 401/403/404. This includes failures during pagination. User authentication can open a browser and requires access to private playlists.
+Setup retains its current prompt defaults, migration, schema, and config-preservation behavior. ARL refresh validates before writing and should use the masked prompt rather than exposing a credential in arguments/history.
 
-## Database sync
+Library sync scans lowercase `.mp3`, `.flac`, `.m4a`, and `.ogg` recursively. It requires title/artist tags, tries ISRC when present, otherwise artist/title, and records the first Deezer match. It requires login and enabled download history. Audio files are not modified.
 
-Sync recursively scans files with lowercase `.mp3`, `.flac`, `.m4a`, or `.ogg` suffixes. Files need title and artist tags. It searches by ISRC when present, otherwise artist/title, and records the first matching Deezer ID.
+## Compatibility aliases
 
-An unsuccessful ISRC search does not perform a second artist/title search. Files without usable tags or matches are skipped. Enable verbose output for per-file diagnostics.
+For one transition, old `--setup`, `--set-arl`, `--sync-db`, and `--gui` keep their existing behavior with deprecation guidance. Legacy `--search` remains read-only listing; it is never silently converted to interactive download. Legacy `--select`, `--first-result`, and `--result-limit` remain isolated compatibility options, not the public verb grammar.
 
-Sync needs Deezer login and `database.downloads_enabled = true` to retain results. It reads audio tags without modifying files. Repeated runs do not duplicate already recorded IDs.
-
-## Errors and cancellation
-
-Ctrl+C cancels CLI download processing. Help exits successfully; argparse errors and missing required config can exit nonzero. Several network/auth/download failures are caught and printed without setting a nonzero process status. Automation must inspect the summary and output files, not only the exit code.
-
-GUI cancellation has different thread behavior and is not a guarantee of interruption during every blocking external request.
+Canonical search needs no `--select`; its menu always waits for consent. There are no mdl equivalents for upstream repair, database browsing, Last.fm, ID, or arbitrary source commands. This release only adapts direct Deezer search.
