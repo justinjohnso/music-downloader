@@ -97,7 +97,8 @@ Refresh validates the credential before writing and changes only `deezer.arl` in
 
 CLI config writes use private temporary files and atomic replacement. On POSIX, these files have mode `600`. If the second ARL write fails, mdl attempts to restore the first file. A crash between writes can leave different credentials.
 
-The current GUI config editor uses a direct write, shows credential values, and converts list values to strings. Avoid using it to edit complex configs or while another process edits the file. These limitations do not apply to the CLI setup/ARL writers.
+The development GUI groups search results by artist/album and supports a sequential queue with retries, rematching, cancellation, and distinct downloaded/skipped/failed outcomes. Choose an engine config, import batch queries, or export JSON results from the interface. CLI batch/retry/JSON commands and GUI queues use the same workflow.
+The config editor masks credentials, preserves arrays/comments, and saves only changed fields against the latest file using private atomic writes. A native setup dialog validates ARL before saving; CLI setup remains available for advanced options. These GUI improvements are not in published `0.1.0`.
 
 ### Auto-repair
 

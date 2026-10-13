@@ -14,7 +14,7 @@ CLI lookup order:
 2. `~/mdl-config.toml`.
 3. `./mdl-config.toml`.
 
-Each location contains `mdl-config.toml`. An unreadable/invalid candidate is skipped after a warning. GUI editing targets only the primary path; GUI downloads use the CLI's legacy-aware lookup.
+Each location contains `mdl-config.toml`. An unreadable/invalid candidate is skipped after a warning. The development GUI uses the same legacy-aware path lookup for editing and downloads.
 
 Standalone streamrip config paths are macOS `~/Library/Application Support/streamrip/config.toml`, Linux `~/.config/streamrip/config.toml`, and Windows `~/AppData/Roaming/streamrip/config.toml`.
 
@@ -209,6 +209,6 @@ Setup validates ARL but offers an explicit continue-anyway choice after failure.
 
 CLI credential/config writers use private same-directory temp files and atomic replacement. Each file is atomic, not the pair: recovery is attempted after a second-write failure, but a crash can leave different ARLs. POSIX files use mode 600; Windows access control is managed by the OS, not POSIX modes.
 
-The current GUI editor does not use the secure writer, can overwrite external edits, displays secrets, and writes list values as strings. Edit TOML directly for arrays and complex values. Do not treat GUI save as a schema validator.
+The development GUI masks secret fields, parses arrays as TOML, and saves only edited fields against the latest disk document using the secure writer. Unknown keys, comments, and unrelated external edits remain intact. It is not a complete schema validator. Published `0.1.0` retains the older editor limitations.
 
 All source descriptions come from the pinned schema, mdl mapping/dispatch, and the actual engine consumers. Upstream template comments can describe paths or flags that mdl does not expose.

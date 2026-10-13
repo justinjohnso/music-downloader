@@ -50,6 +50,9 @@ jobs:
           python -m build --wheel --outdir "$RUNNER_TEMP/mdl-wheels"
           python -m pip install "$RUNNER_TEMP"/mdl-wheels/*.whl
           python -m pip check
+      - name: Linux GUI test libraries
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libopengl0
       - name: Application regressions
         run: python -m pytest -ra
       - name: Installed entrypoints
