@@ -146,6 +146,9 @@ def test_artist_shapes_and_empty_pages():
     assert streamrip_search._normalized_pages([{"data": []}], 10) == []
 
 
+@pytest.mark.skipif(
+    __import__("sys").platform == "win32", reason="POSIX terminal-menu dependency"
+)
 def test_real_upstream_menu_escape_is_non_destructive(tmp_path, monkeypatch):
     from streamrip.client import DeezerClient
     from streamrip.config import Config
@@ -186,7 +189,6 @@ def test_platform_menu_selection_resolves_chosen_media(tmp_path, monkeypatch, sy
     from streamrip.client import DeezerClient
     from streamrip.config import Config
     from streamrip.rip.main import Main
-    from simple_term_menu import TerminalMenu
 
     config = Config.defaults()
     config.session.deezer.arl = "TEST"
@@ -219,9 +221,22 @@ def test_platform_menu_selection_resolves_chosen_media(tmp_path, monkeypatch, sy
     if system == "Windows":
         monkeypatch.setitem(sys.modules, "pick", SimpleNamespace(pick=chooser))
     else:
-        monkeypatch.setattr(TerminalMenu, "__init__", lambda *args, **kwargs: None)
+        if sys.platform == "win32":
+            menu_type = type(
+                "TerminalMenu",
+                (),
+                {"__init__": lambda *args, **kwargs: None, "show": lambda self: (0,)},
+            )
+            monkeypatch.setitem(
+                sys.modules, "simple_term_menu", SimpleNamespace(TerminalMenu=menu_type)
+            )
+        else:
+            from simple_term_menu import TerminalMenu
+
+            menu_type = TerminalMenu
+            monkeypatch.setattr(menu_type, "__init__", lambda *args, **kwargs: None)
         chooser = MagicMock(return_value=(0,))
-        monkeypatch.setattr(TerminalMenu, "show", chooser)
+        monkeypatch.setattr(menu_type, "show", chooser)
     media = SimpleNamespace(download_path=str(tmp_path / "chosen.mp3"), rip=AsyncMock())
     pending = SimpleNamespace(id="7", resolve=AsyncMock(return_value=media))
     selected = []
