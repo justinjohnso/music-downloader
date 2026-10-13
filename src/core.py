@@ -34,6 +34,7 @@ async def download_track_with_client(
     result_limit: int = 10,
     selected_candidate: TrackCandidate | None = None,
     candidate_callback=None,
+    outcome_callback=None,
 ) -> Tuple[Literal["downloaded", "duplicate_skipped", "failed"], Optional[str]]:
     """
     Search for a track on Deezer using the provided client and download the first result.
@@ -144,6 +145,8 @@ async def download_track_with_client(
             )
         except Exception as e:
             print(f"Error preparing download: {e}")
+            if outcome_callback is not None:
+                outcome_callback("failed", str(e) or type(e).__name__, None)
             return "failed", None
 
         try:
@@ -151,16 +154,32 @@ async def download_track_with_client(
             print(f"Downloading '{title}' by {artist}...")
             resolved = await pending.resolve()
             if resolved is None:
+                if outcome_callback is not None:
+                    outcome_callback(
+                        "failed", "Track resolution failed or is unavailable", None
+                    )
+                    return "failed", track_label
                 print(_warn(f"Track already downloaded, skipping: {track_label}"))
                 return "duplicate_skipped", track_label
             await resolved.rip()
+            if outcome_callback is not None:
+                output = getattr(resolved, "download_path", None)
+                outcome_callback(
+                    "downloaded",
+                    "Download completed",
+                    output if isinstance(output, str) else None,
+                )
             print(f"Successfully downloaded '{title}' by {artist}")
             return "downloaded", track_label
         except Exception as e:
             print(f"Error downloading track: {e}")
+            if outcome_callback is not None:
+                outcome_callback("failed", str(e) or type(e).__name__, None)
             return "failed", track_label
     except Exception as e:
         print(f"Error during track processing: {e}")
+        if outcome_callback is not None:
+            outcome_callback("failed", str(e) or type(e).__name__, None)
         return "failed", None
 
 
