@@ -157,7 +157,7 @@ python scripts/regen-example-config.py
 
 The generator uses the current platform's database paths. Review those paths before sharing the example. The example also retains upstream comments; consult the config reference for mdl-specific behavior.
 
-`vendor/streamrip` is pinned as a Git submodule. Existing patch helpers are documented in `vendor/streamrip-patches/README.md`. Do not apply a historical patch blindly to an already patched revision. Keep vendor changes separate and verify the schema and application tests.
+`vendor/streamrip` is pinned as a Git submodule. Active compatibility overrides live in `src/config.py` and run when the application imports it. Keep vendor changes separate and verify the schema and application tests.
 
 Historical implementation notes live in `docs/ai/`; they are not user documentation or current release status.
 
