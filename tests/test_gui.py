@@ -152,3 +152,45 @@ def test_gui_batch_keeps_all_outcomes(window):
     widget.record_outcome({"status": "downloaded", "query": "second"})
     assert widget.queue_items[0]["status"] == "failed"
     assert len(widget.queue_items[0]["outcomes"]) == 2
+
+
+def test_cancelled_batch_overrides_earlier_success(window):
+    widget, _ = window
+    widget.show_candidates([candidate()])
+    widget.results.topLevelItem(0).setSelected(True)
+    widget.queue_selected()
+    widget.active_row = 0
+    widget.record_outcome({"status": "downloaded", "query": "first"})
+    widget.worker_completed(False, "Cancelled")
+    assert widget.queue_items[0]["status"] == "cancelled"
+    assert len(widget.queue_items[0]["outcomes"]) == 1
+
+
+def test_queue_does_not_reassign_row_while_worker_runs(window):
+    from unittest.mock import MagicMock
+
+    widget, _ = window
+    widget.show_candidates([candidate(), candidate("2")])
+    widget.results.topLevelItem(0).setSelected(True)
+    widget.queue_selected()
+    widget.active_row = 0
+    widget.queue_items[0]["status"] = "Running"
+    widget.worker = MagicMock()
+    widget.worker.isRunning.return_value = True
+    widget.next_queued()
+    assert widget.active_row == 0
+    assert widget.queue_items[1]["status"] == "Pending"
+    widget.worker.isRunning.return_value = False
+
+
+def test_retry_retains_internal_candidate_without_exporting_it(window):
+    widget, _ = window
+    widget.show_candidates([candidate()])
+    widget.results.topLevelItem(0).setSelected(True)
+    widget.queue_selected()
+    widget.active_row = 0
+    widget.queue_items[0].pop("candidate")
+    outcome = {"status": "failed", "query": "query", "candidate": candidate("19")}
+    widget.record_outcome(outcome)
+    assert widget.queue_items[0]["candidate"]["id"] == "19"
+    assert "candidate" not in widget.queue_items[0]["outcome"]

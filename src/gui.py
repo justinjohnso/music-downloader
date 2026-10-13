@@ -74,6 +74,7 @@ class Worker(QThread):
         limit: int = 10,
         engine_config_path: str | None = None,
         retries: int = 0,
+        queue_items: list[dict] | None = None,
     ) -> None:
         super().__init__()
         self.mode, self.query, self.verbose, self.candidate, self.limit = (
@@ -85,6 +86,7 @@ class Worker(QThread):
         )
         self.engine_config_path = engine_config_path
         self.retries = retries
+        self.queue_items = queue_items
         self.loop = None
         self.task = None
         self.cancel_requested = False
@@ -120,18 +122,24 @@ class Worker(QThread):
                 config_path=self.engine_config_path,
                 retries=self.retries,
                 verbose=self.verbose,
-                outcome_callback=lambda result: self.outcome.emit(result.to_dict()),
+                outcome_callback=lambda result: self.outcome.emit(
+                    {**result.to_dict(), "candidate": result.candidate}
+                ),
             )
             return results[0].status in ("downloaded", "skipped")
         elif self.mode == "download":
             from .workflow import expand_input
 
             results = await run_queue(
-                await expand_input(self.query),
+                self.queue_items
+                if self.queue_items is not None
+                else await expand_input(self.query),
                 config_path=self.engine_config_path,
                 retries=self.retries,
                 verbose=self.verbose,
-                outcome_callback=lambda result: self.outcome.emit(result.to_dict()),
+                outcome_callback=lambda result: self.outcome.emit(
+                    {**result.to_dict(), "candidate": result.candidate}
+                ),
             )
             return bool(results) and all(
                 result.status in ("downloaded", "skipped") for result in results
@@ -431,10 +439,6 @@ class MainWindow(QWidget):
                         "arl": validated_arl,
                         "quality": quality.value(),
                         "folder": folder.text(),
-                        "spotify_id": existing.get("spotify", {}).get("client_id", ""),
-                        "spotify_secret": existing.get("spotify", {}).get(
-                            "client_secret", ""
-                        ),
                     },
                 )
                 dialog.accept()
@@ -464,6 +468,7 @@ class MainWindow(QWidget):
         try:
             document = tomlkit.parse(self.config_path.read_bytes().decode("utf-8"))
             changed = []
+            external_changes = []
             for (section, key), widget in self.config_widgets.items():
                 original = self.original_values[(section, key)]
                 if isinstance(widget, QCheckBox):
@@ -478,6 +483,9 @@ class MainWindow(QWidget):
                     value = float(widget.text())
                 else:
                     value = widget.text()
+                disk_value = document.get(section, {}).get(key)
+                if value == original and disk_value != original:
+                    external_changes.append(f"{section}.{key}")
                 if value != original:
                     document[section][key] = value
                     changed.append(((section, key), value))
@@ -485,7 +493,12 @@ class MainWindow(QWidget):
                 _secure_write(self.config_path, tomlkit.dumps(document))
                 for key, value in changed:
                     self.original_values[key] = value
-            self.config_status.setText("Config saved")
+            self.config_status.setText(
+                "Config saved; external changes preserved, reopen to refresh: "
+                + ", ".join(external_changes)
+                if external_changes
+                else "Config saved"
+            )
         except Exception as error:
             self.config_status.setText(f"Error: {error}")
 
@@ -544,11 +557,27 @@ class MainWindow(QWidget):
             self.engine_config_path,
             self.retries.value(),
         )
+        if self.active_row is not None:
+            item = self.queue_items[self.active_row]
+            self.worker.queue_items = item.pop("retry_batch", None)
+            if self.worker.queue_items is not None:
+                item.pop("retry_items", None)
         self.worker.progress.connect(self.log.append)
         self.worker.candidates.connect(self.show_candidates)
-        self.worker.completed.connect(self.worker_completed)
-        self.worker.outcome.connect(self.record_outcome)
-        self.worker.finished.connect(self.queue_after_worker)
+        owner = self.worker
+        self.worker.completed.connect(
+            lambda success, message: (
+                self.worker_completed(success, message)
+                if self.worker is owner
+                else None
+            )
+        )
+        self.worker.outcome.connect(
+            lambda outcome: (
+                self.record_outcome(outcome) if self.worker is owner else None
+            )
+        )
+        self.worker.finished.connect(lambda: self.queue_after_worker(owner))
         self.start_button.setEnabled(False)
         self.search_button.setEnabled(False)
         self.download_button.setEnabled(False)
@@ -613,7 +642,17 @@ class MainWindow(QWidget):
             self.engine_label.setText(path)
 
     def record_outcome(self, outcome: dict) -> None:
+        outcome = dict(outcome)
+        retained_candidate = outcome.pop("candidate", None)
         if self.active_row is not None:
+            row = self.queue_items[self.active_row]
+            if retained_candidate is not None and not is_spotify_link(
+                row.get("query", "")
+            ):
+                row["candidate"] = retained_candidate
+            row.setdefault("retry_items", []).append(
+                {"query": outcome["query"], "candidate": retained_candidate}
+            )
             self.queue_items[self.active_row].setdefault("outcomes", []).append(outcome)
             self.queue_items[self.active_row]["outcome"] = outcome
             statuses = [
@@ -661,6 +700,8 @@ class MainWindow(QWidget):
     def replace_queue_candidate(self, row: int, candidate: dict) -> None:
         self.queue_items[row].pop("outcome", None)
         self.queue_items[row].pop("outcomes", None)
+        self.queue_items[row].pop("retry_items", None)
+        self.queue_items[row].pop("retry_batch", None)
         self.queue_items[row]["candidate"] = candidate
         self.queue_items[row]["status"] = "Pending"
         self.queue_table.item(row, 0).setText(format_track_candidate(candidate))
@@ -678,6 +719,9 @@ class MainWindow(QWidget):
             if "candidate" in self.queue_items[row]:
                 self.replace_queue_candidate(row, self.queue_items[row]["candidate"])
             else:
+                self.queue_items[row]["retry_batch"] = (
+                    self.queue_items[row].get("retry_items", []) or None
+                )
                 self.queue_items[row]["status"] = "Pending"
                 self.queue_table.item(row, 1).setText("Pending")
 
@@ -712,12 +756,14 @@ class MainWindow(QWidget):
             for result in candidates:
                 item = QTreeWidgetItem(choices, [format_track_candidate(result)])
                 item.setData(0, Qt.ItemDataRole.UserRole, result)
-            select.setEnabled(bool(candidates))
+            select.setEnabled(False)
 
         def begin() -> None:
             nonlocal worker
             if worker is not None and worker.isRunning():
                 return
+            select.setEnabled(False)
+            choices.clear()
             worker = Worker(
                 "search",
                 query.text(),
@@ -728,6 +774,9 @@ class MainWindow(QWidget):
             dialog.worker = worker
             worker.setParent(dialog)
             worker.candidates.connect(found)
+            worker.finished.connect(
+                lambda: select.setEnabled(choices.topLevelItemCount() > 0)
+            )
             worker.completed.connect(
                 lambda success, message: (
                     self.log.append(message) if not success else None
@@ -736,6 +785,8 @@ class MainWindow(QWidget):
             worker.start()
 
         def choose() -> None:
+            if worker is not None and worker.isRunning():
+                return
             item = choices.currentItem()
             if item is not None:
                 self.replace_queue_candidate(
@@ -754,6 +805,8 @@ class MainWindow(QWidget):
         self.next_queued()
 
     def next_queued(self) -> None:
+        if self.worker is not None and self.worker.isRunning():
+            return
         for row, item in enumerate(self.queue_items):
             if item["status"] == "Pending":
                 self.active_row = row
@@ -775,7 +828,7 @@ class MainWindow(QWidget):
         self.search_button.setEnabled(True)
         self.download_button.setEnabled(True)
         if self.active_row is not None:
-            if "outcome" not in self.queue_items[self.active_row]:
+            if not success or "outcome" not in self.queue_items[self.active_row]:
                 self.queue_items[self.active_row]["status"] = (
                     "cancelled" if message == "Cancelled" else "failed"
                 )
@@ -788,7 +841,9 @@ class MainWindow(QWidget):
             )
             self.active_row = None
 
-    def queue_after_worker(self) -> None:
+    def queue_after_worker(self, owner=None) -> None:
+        if owner is not None and self.worker is not owner:
+            return
         self.start_button.setEnabled(True)
         if self.queue_running:
             self.next_queued()
