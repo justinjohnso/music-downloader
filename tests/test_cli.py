@@ -37,8 +37,8 @@ downloader.main()
     )
     assert result.returncode == 0, result.stderr
     if mode == "--help":
-        assert "--sync-db" in result.stdout
-        assert "--set-arl" in result.stdout
+        assert "library" in result.stdout
+        assert "auth" in result.stdout
 
 
 @pytest.mark.parametrize("entrypoint", ["flag", "script"])
@@ -58,7 +58,7 @@ def test_gui_entrypoints_dispatch_to_launcher(monkeypatch, entrypoint: str) -> N
 
 
 def test_selection_prompt_retries_and_skips(monkeypatch):
-    from src.downloader import _prompt_for_candidate
+    from src.legacy_cli import _prompt_for_candidate
 
     candidate = {"artist": "Artist", "title": "Track", "album": "Album"}
     answers = iter(["bad", "2", "1"])
@@ -77,7 +77,7 @@ def test_download_defaults_remain_noninteractive(monkeypatch, flags):
     from unittest.mock import AsyncMock
 
     download = AsyncMock()
-    monkeypatch.setattr(downloader, "download_track", download)
+    monkeypatch.setattr("src.legacy_cli.download_track", download)
     monkeypatch.setattr("src.config.load_config", lambda: {"deezer": {"arl": "test"}})
     monkeypatch.setattr("src.config.ensure_mdl_config_complete", lambda: None)
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
@@ -96,7 +96,7 @@ def test_search_lists_results_without_downloading(monkeypatch, capsys):
     )
     monkeypatch.setattr("src.search.search_track_candidates", search)
     download = AsyncMock()
-    monkeypatch.setattr(downloader, "download_track", download)
+    monkeypatch.setattr("src.legacy_cli.download_track", download)
     monkeypatch.setattr("src.config.load_config", lambda: {"deezer": {"arl": "test"}})
     monkeypatch.setattr("src.config.ensure_mdl_config_complete", lambda: None)
     monkeypatch.setattr(
@@ -113,7 +113,7 @@ def test_explicit_streamrip_config_is_forwarded(monkeypatch):
     from unittest.mock import AsyncMock
 
     download = AsyncMock()
-    monkeypatch.setattr(downloader, "download_track", download)
+    monkeypatch.setattr("src.legacy_cli.download_track", download)
     monkeypatch.setattr("src.config.load_config", lambda: {"deezer": {"arl": "test"}})
     monkeypatch.setattr("src.config.ensure_mdl_config_complete", lambda: None)
     monkeypatch.setattr(
